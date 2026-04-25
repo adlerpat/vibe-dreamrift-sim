@@ -2,10 +2,18 @@ type RoomRenderState = {
   width: number;
   height: number;
   elapsedSeconds: number;
+  activeTelegraph: {
+    label: string;
+    x: number;
+    y: number;
+    radius: number;
+    timeRemaining: number;
+    totalDuration: number;
+  } | null;
 };
 
 export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderState): void {
-  const { width, height, elapsedSeconds } = state;
+  const { width, height, elapsedSeconds, activeTelegraph } = state;
 
   context.clearRect(0, 0, width, height);
 
@@ -18,6 +26,7 @@ export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderS
 
   drawVignette(context, width, height);
   drawArenaFloor(context, width, height, elapsedSeconds);
+  drawTelegraph(context, activeTelegraph, elapsedSeconds);
   drawBossPlatform(context, width, height);
 }
 
@@ -116,6 +125,45 @@ function drawBossPlatform(context: CanvasRenderingContext2D, width: number, heig
   context.beginPath();
   context.ellipse(centerX, centerY, 78, 54, 0, 0, Math.PI * 2);
   context.stroke();
+}
+
+function drawTelegraph(
+  context: CanvasRenderingContext2D,
+  telegraph: RoomRenderState["activeTelegraph"],
+  elapsedSeconds: number,
+): void {
+  if (!telegraph) {
+    return;
+  }
+
+  const progress = telegraph.totalDuration <= 0 ? 0 : telegraph.timeRemaining / telegraph.totalDuration;
+  const pulse = 0.55 + Math.sin(elapsedSeconds * 9) * 0.08;
+
+  context.save();
+
+  context.fillStyle = `rgba(196, 70, 96, ${0.16 + (1 - progress) * 0.14})`;
+  context.beginPath();
+  context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
+  context.fill();
+
+  context.strokeStyle = `rgba(248, 172, 190, ${pulse})`;
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
+  context.stroke();
+
+  context.strokeStyle = "rgba(255, 226, 233, 0.24)";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(telegraph.x, telegraph.y, telegraph.radius * Math.max(0.18, progress), 0, Math.PI * 2);
+  context.stroke();
+
+  context.fillStyle = "rgba(255, 240, 244, 0.92)";
+  context.font = "700 14px Trebuchet MS";
+  context.textAlign = "center";
+  context.fillText(telegraph.label, telegraph.x, telegraph.y - telegraph.radius - 12);
+
+  context.restore();
 }
 
 function roundRect(

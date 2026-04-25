@@ -75,6 +75,7 @@ app.innerHTML = `
                 </div>
               </div>
             </div>
+            <p class="boss-cast-text">No active cast</p>
           </div>
 
           <div class="canvas-frame">
@@ -83,22 +84,6 @@ app.innerHTML = `
         </section>
 
         <aside class="encounter-panel">
-          <div class="panel-card" data-card>
-            <div class="panel-card-head">
-              <p class="panel-label">Encounter</p>
-              <button class="panel-close-button" data-card-toggle type="button" aria-label="Collapse encounter panel">
-                -
-              </button>
-            </div>
-            <div class="panel-card-body">
-              <h2>Dreamrift, Seed of Midnight</h2>
-              <p>
-                Pick a role and move your assigned raider with WASD or the arrow keys. Use
-                1, 2, and 3 for melee, ranged, and your role action.
-              </p>
-            </div>
-          </div>
-
           <div class="panel-card" data-card>
             <div class="panel-card-head">
               <p class="panel-label">Active Unit</p>
@@ -110,55 +95,6 @@ app.innerHTML = `
               <h2 class="active-unit-name">Ariyn</h2>
               <p class="active-unit-role">Damage Dealer</p>
               <p class="active-unit-hint">Use WASD to reposition around the arena.</p>
-            </div>
-          </div>
-
-          <div class="panel-card" data-card>
-            <div class="panel-card-head">
-              <p class="panel-label">Vitals</p>
-              <button class="panel-close-button" data-card-toggle type="button" aria-label="Collapse vitals panel">
-                -
-              </button>
-            </div>
-            <div class="panel-card-body">
-              <div class="vitals-grid">
-                <div class="vital-block">
-                  <div class="vital-row">
-                    <span class="vital-name active-unit-vital-name">Ariyn</span>
-                    <span class="vital-value active-unit-vital-value">110 / 110</span>
-                  </div>
-                  <div class="vital-bar">
-                    <div class="vital-bar-fill active-unit-vital-fill" style="width: 100%"></div>
-                  </div>
-                </div>
-
-                <div class="vital-block">
-                  <div class="vital-row">
-                    <span class="vital-name boss-vital-name">Kimärus</span>
-                    <span class="vital-value boss-vital-value">1200 / 1200</span>
-                  </div>
-                  <div class="vital-bar boss-vital-bar">
-                    <div class="vital-bar-fill boss-vital-fill" style="width: 100%"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-card" data-card>
-            <div class="panel-card-head">
-              <p class="panel-label">Prototype Focus</p>
-              <button class="panel-close-button" data-card-toggle type="button" aria-label="Collapse prototype focus panel">
-                -
-              </button>
-            </div>
-            <div class="panel-card-body">
-              <ul class="panel-list">
-                <li>Six raid members and one boss marker</li>
-                <li>Basic attacks and role abilities on cooldowns</li>
-                <li>Raidleader swap between all allies with Tab</li>
-                <li>Health bars and encounter feedback loop</li>
-              </ul>
             </div>
           </div>
 
@@ -193,15 +129,10 @@ const pulltimerCount = document.querySelector<HTMLElement>(".pulltimer-count");
 const activeUnitName = document.querySelector<HTMLElement>(".active-unit-name");
 const activeUnitRole = document.querySelector<HTMLElement>(".active-unit-role");
 const activeUnitHint = document.querySelector<HTMLElement>(".active-unit-hint");
-const activeUnitVitalName = document.querySelector<HTMLElement>(".active-unit-vital-name");
-const activeUnitVitalValue = document.querySelector<HTMLElement>(".active-unit-vital-value");
-const activeUnitVitalFill = document.querySelector<HTMLElement>(".active-unit-vital-fill");
-const bossVitalName = document.querySelector<HTMLElement>(".boss-vital-name");
-const bossVitalValue = document.querySelector<HTMLElement>(".boss-vital-value");
-const bossVitalFill = document.querySelector<HTMLElement>(".boss-vital-fill");
 const bossHeaderTitle = document.querySelector<HTMLElement>(".boss-title");
 const bossHeaderValue = document.querySelector<HTMLElement>(".boss-header-value");
 const bossHeaderFill = document.querySelector<HTMLElement>(".boss-header-fill");
+const bossCastText = document.querySelector<HTMLElement>(".boss-cast-text");
 const actionBar = document.querySelector<HTMLElement>(".action-bar");
 const abilityTooltip = document.querySelector<HTMLElement>(".ability-tooltip");
 const combatLog = document.querySelector<HTMLElement>(".combat-log");
@@ -217,15 +148,10 @@ if (
   !activeUnitName ||
   !activeUnitRole ||
   !activeUnitHint ||
-  !activeUnitVitalName ||
-  !activeUnitVitalValue ||
-  !activeUnitVitalFill ||
-  !bossVitalName ||
-  !bossVitalValue ||
-  !bossVitalFill ||
   !bossHeaderTitle ||
   !bossHeaderValue ||
   !bossHeaderFill ||
+  !bossCastText ||
   !actionBar ||
   !abilityTooltip ||
   !combatLog ||
@@ -245,26 +171,20 @@ const game = new Game(canvas, {
   },
   onHudChange: ({
     abilities,
+    bossCastLabel,
+    bossCastRemaining,
     bossHp,
     bossMaxHp,
     bossName,
     logEntries,
     raidFrames: raidFrameEntries,
-    roleLabel,
-    unitHp,
-    unitMaxHp,
-    unitName,
   }) => {
-    activeUnitVitalName.textContent = `${unitName} (${roleLabel})`;
-    activeUnitVitalValue.textContent = `${unitHp} / ${unitMaxHp}`;
-    activeUnitVitalFill.style.width = `${(unitHp / unitMaxHp) * 100}%`;
-
-    bossVitalName.textContent = bossName;
-    bossVitalValue.textContent = `${bossHp} / ${bossMaxHp}`;
-    bossVitalFill.style.width = `${(bossHp / bossMaxHp) * 100}%`;
     bossHeaderTitle.textContent = bossName;
     bossHeaderValue.textContent = `${bossHp} / ${bossMaxHp}`;
     bossHeaderFill.style.width = `${(bossHp / bossMaxHp) * 100}%`;
+    bossCastText.textContent = bossCastLabel
+      ? `${bossCastLabel} • ${bossCastRemaining.toFixed(1)}s`
+      : "No active cast";
 
     actionBar.innerHTML = abilities
       .map(

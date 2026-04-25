@@ -129,6 +129,7 @@ export class Game {
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT,
       elapsedSeconds,
+      activeTelegraph: this.state.activeTelegraph,
     });
     renderUnits(this.context, {
       units: this.state.units,

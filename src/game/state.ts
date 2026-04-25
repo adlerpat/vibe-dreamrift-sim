@@ -24,6 +24,16 @@ export type Boss = {
   maxHp: number;
 };
 
+export type GroundTelegraph = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  radius: number;
+  timeRemaining: number;
+  totalDuration: number;
+};
+
 export type CombatLogEntry = {
   id: string;
   text: string;
@@ -48,6 +58,8 @@ export type HudSnapshot = {
   bossName: string;
   bossHp: number;
   bossMaxHp: number;
+  bossCastLabel: string | null;
+  bossCastRemaining: number;
   raidFrames: Array<{
     id: string;
     name: string;
@@ -69,6 +81,8 @@ export type GameState = {
   cooldowns: Record<AbilityId, number>;
   logEntries: CombatLogEntry[];
   auraPulseTimer: number;
+  voidBloomTimer: number;
+  activeTelegraph: GroundTelegraph | null;
   encounterFinished: boolean;
 };
 
@@ -182,6 +196,8 @@ export function createInitialState(): GameState {
       },
     ],
     auraPulseTimer: 3.5,
+    voidBloomTimer: 6,
+    activeTelegraph: null,
     encounterFinished: false,
   };
 }
@@ -238,6 +254,8 @@ export function tickEncounter(state: GameState, deltaSeconds: number): void {
     addLogEntry(state, "Dreamrift collapses. Prototype victory.", "utility");
     return;
   }
+
+  tickVoidBloom(state, deltaSeconds);
 
   state.auraPulseTimer -= deltaSeconds;
 
@@ -308,6 +326,8 @@ export function getHudSnapshot(state: GameState): HudSnapshot {
     bossName: state.boss.name,
     bossHp: state.boss.hp,
     bossMaxHp: state.boss.maxHp,
+    bossCastLabel: state.activeTelegraph?.label ?? null,
+    bossCastRemaining: state.activeTelegraph?.timeRemaining ?? 0,
     raidFrames: state.units.map((raidUnit) => ({
       id: raidUnit.id,
       name: raidUnit.name,
@@ -403,6 +423,59 @@ function getLowestHealthUnit(units: Unit[]): Unit {
   });
 }
 
+function tickVoidBloom(state: GameState, deltaSeconds: number): void {
+  if (state.activeTelegraph) {
+    state.activeTelegraph.timeRemaining = Math.max(0, state.activeTelegraph.timeRemaining - deltaSeconds);
+
+    if (state.activeTelegraph.timeRemaining > 0) {
+      return;
+    }
+
+    resolveVoidBloom(state, state.activeTelegraph);
+    state.activeTelegraph = null;
+    state.voidBloomTimer = 7.5;
+    return;
+  }
+
+  state.voidBloomTimer -= deltaSeconds;
+
+  if (state.voidBloomTimer > 0) {
+    return;
+  }
+
+  const targetUnit = getSelectedUnit(state);
+
+  state.activeTelegraph = {
+    id: crypto.randomUUID(),
+    label: "Void Bloom",
+    x: targetUnit.x,
+    y: targetUnit.y,
+    radius: 64,
+    timeRemaining: 1.8,
+    totalDuration: 1.8,
+  };
+
+  addLogEntry(state, `Kimärus begins casting Void Bloom under ${targetUnit.name}.`, "utility");
+}
+
+function resolveVoidBloom(state: GameState, telegraph: GroundTelegraph): void {
+  const targets = state.mode === "raidleader" ? state.units : [getSelectedUnit(state)];
+  const hitUnits = targets.filter((unit) => isInsideTelegraph(unit, telegraph));
+
+  if (hitUnits.length === 0) {
+    addLogEntry(state, "Void Bloom detonates harmlessly.", "utility");
+    return;
+  }
+
+  for (const unit of hitUnits) {
+    const damage = unit.role === "tank" ? 24 : 32;
+    unit.hp = Math.max(0, unit.hp - damage);
+  }
+
+  const names = hitUnits.map((unit) => unit.name).join(", ");
+  addLogEntry(state, `Void Bloom detonates on ${names}.`, "damage");
+}
+
 function applyAuraPulse(state: GameState): void {
   const targets = state.units.filter((unit) => unit.hp > 0);
 
@@ -432,6 +505,12 @@ function isInRange(unit: Unit, boss: Boss, extraRange: number): boolean {
   const dy = unit.y - boss.y;
   const distance = Math.hypot(dx, dy);
   return distance <= boss.radius + unit.radius + extraRange;
+}
+
+function isInsideTelegraph(unit: Unit, telegraph: GroundTelegraph): boolean {
+  const dx = unit.x - telegraph.x;
+  const dy = unit.y - telegraph.y;
+  return Math.hypot(dx, dy) <= telegraph.radius + unit.radius * 0.5;
 }
 
 function addLogEntry(
