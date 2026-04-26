@@ -4,6 +4,19 @@ import {
   type ScheduledSpellConfig,
   type SpellId,
 } from "../data/bosses/chimaerus";
+import { COLOSSAL_HORROR } from "../data/actors/adds/colossal-horror";
+import { SWARMING_SHADE } from "../data/actors/adds/swarming-shade";
+import { KIMARUS_BOSS } from "../data/actors/bosses/kimarus";
+import { ALNDUST_UPHEAVAL } from "../data/actors/bosses/kimarus/spells/alndustUpheaval";
+import { CONSUME } from "../data/actors/bosses/kimarus/spells/consume";
+import { CORRUPTED_DEVASTATION } from "../data/actors/bosses/kimarus/spells/corruptedDevastation";
+import { RAVENOUS_DIVE } from "../data/actors/bosses/kimarus/spells/ravenousDive";
+import { RENDING_TEAR } from "../data/actors/bosses/kimarus/spells/rendingTear";
+import { RIFT_EMERGENCE } from "../data/actors/bosses/kimarus/spells/riftEmergence";
+import { COMMON_PLAYER_ABILITIES, SUPPORT_RAID_DAMAGE } from "../data/actors/players/common";
+import { DAMAGE_ARCHETYPE, DAMAGE_ROLE_ABILITY, DAMAGE_UNITS } from "../data/actors/players/damage";
+import { HEALER_ARCHETYPE, HEALER_ROLE_ABILITY, HEALER_UNITS } from "../data/actors/players/healer";
+import { TANK_ARCHETYPE, TANK_ROLE_ABILITY, TANK_UNITS } from "../data/actors/players/tank";
 
 export type Role = "tank" | "damage" | "healer";
 export type GameMode = Role | "raidleader";
@@ -167,92 +180,32 @@ export type SelectionSummary = {
 const MAX_LOG_ENTRIES = 5;
 const DEBUG_ENCOUNTER = true;
 
+function createPlayerUnit(
+  unit: { id: string; name: string; x: number; y: number; color: string },
+  archetype: { role: Role; radius: number; speed: number; hp: number; maxHp: number },
+  _startingAggro: number,
+): Unit {
+  return {
+    id: unit.id,
+    name: unit.name,
+    role: archetype.role,
+    phase: "material",
+    x: unit.x,
+    y: unit.y,
+    radius: archetype.radius,
+    speed: archetype.speed,
+    color: unit.color,
+    hp: archetype.hp,
+    maxHp: archetype.maxHp,
+    pendingRecoverySeconds: 0,
+  };
+}
+
 export function createInitialState(): GameState {
   const units: Unit[] = [
-    {
-      id: "tank-1",
-      name: "Brom",
-      role: "tank",
-      phase: "material",
-      x: 560,
-      y: 276,
-      radius: 18,
-      speed: 210,
-      color: "#4fa7d8",
-      hp: 150,
-      maxHp: 150,
-      pendingRecoverySeconds: 0,
-    },
-    {
-      id: "tank-2",
-      name: "Serah",
-      role: "tank",
-      phase: "material",
-      x: 720,
-      y: 276,
-      radius: 18,
-      speed: 210,
-      color: "#57bee8",
-      hp: 150,
-      maxHp: 150,
-      pendingRecoverySeconds: 0,
-    },
-    {
-      id: "damage-1",
-      name: "Ariyn",
-      role: "damage",
-      phase: "material",
-      x: 514,
-      y: 496,
-      radius: 16,
-      speed: 250,
-      color: "#d87552",
-      hp: 110,
-      maxHp: 110,
-      pendingRecoverySeconds: 0,
-    },
-    {
-      id: "damage-2",
-      name: "Kael",
-      role: "damage",
-      phase: "material",
-      x: 766,
-      y: 496,
-      radius: 16,
-      speed: 250,
-      color: "#ef9568",
-      hp: 110,
-      maxHp: 110,
-      pendingRecoverySeconds: 0,
-    },
-    {
-      id: "healer-1",
-      name: "Mira",
-      role: "healer",
-      phase: "material",
-      x: 596,
-      y: 548,
-      radius: 16,
-      speed: 230,
-      color: "#96df84",
-      hp: 100,
-      maxHp: 100,
-      pendingRecoverySeconds: 0,
-    },
-    {
-      id: "healer-2",
-      name: "Thalen",
-      role: "healer",
-      phase: "material",
-      x: 684,
-      y: 548,
-      radius: 16,
-      speed: 230,
-      color: "#c4f0a4",
-      hp: 100,
-      maxHp: 100,
-      pendingRecoverySeconds: 0,
-    },
+    ...TANK_UNITS.map((unit, index) => createPlayerUnit(unit, TANK_ARCHETYPE, index === 0 ? TANK_ARCHETYPE.startingAggro.primary : TANK_ARCHETYPE.startingAggro.secondary)),
+    ...DAMAGE_UNITS.map((unit) => createPlayerUnit(unit, DAMAGE_ARCHETYPE, DAMAGE_ARCHETYPE.startingAggro)),
+    ...HEALER_UNITS.map((unit) => createPlayerUnit(unit, HEALER_ARCHETYPE, HEALER_ARCHETYPE.startingAggro)),
   ];
 
   return {
@@ -260,27 +213,27 @@ export function createInitialState(): GameState {
     selectedUnitId: "damage-1",
     units,
     boss: {
-      name: "Kimärus",
-      x: 640,
-      y: 324,
-      radius: 42,
-      speed: 116,
+      name: KIMARUS_BOSS.name,
+      x: KIMARUS_BOSS.spawn.x,
+      y: KIMARUS_BOSS.spawn.y,
+      radius: KIMARUS_BOSS.radius,
+      speed: KIMARUS_BOSS.speed,
       phase: "material",
-      hp: 5200,
-      maxHp: 5200,
+      hp: KIMARUS_BOSS.hp,
+      maxHp: KIMARUS_BOSS.maxHp,
       energy: 0,
       visible: true,
       attackable: true,
       damageBoostStacks: 0,
-      targetUnitId: "tank-1",
+      targetUnitId: KIMARUS_BOSS.startingTargetUnitId,
     },
     aggro: {
-      "tank-1": 120,
-      "tank-2": 90,
-      "damage-1": 28,
-      "damage-2": 28,
-      "healer-1": 20,
-      "healer-2": 20,
+      "tank-1": TANK_ARCHETYPE.startingAggro.primary,
+      "tank-2": TANK_ARCHETYPE.startingAggro.secondary,
+      "damage-1": DAMAGE_ARCHETYPE.startingAggro,
+      "damage-2": DAMAGE_ARCHETYPE.startingAggro,
+      "healer-1": HEALER_ARCHETYPE.startingAggro,
+      "healer-2": HEALER_ARCHETYPE.startingAggro,
     },
     adds: [],
     cooldowns: {
@@ -432,33 +385,37 @@ export function useAbility(state: GameState, abilityId: AbilityId): boolean {
 
   if (abilityId === "melee") {
     if (addTarget) {
-      if (!isInAddRange(unit, addTarget, 52)) {
+      if (!isInAddRange(unit, addTarget, COMMON_PLAYER_ABILITIES.melee.addRange)) {
         addLogEntry(state, `${unit.name} is too far away to strike ${addTarget.name}.`, "utility");
         return false;
       }
 
       dealDamageToAdd(state, addTarget, 42, `${unit.name} cleaves ${addTarget.name} for 42 damage.`);
-      addAggro(state, unit.id, 22);
-      state.cooldowns.melee = 1.1;
+      addAggro(state, unit.id, COMMON_PLAYER_ABILITIES.melee.addAggro);
+      state.cooldowns.melee = COMMON_PLAYER_ABILITIES.melee.cooldown;
       return true;
     }
 
-    if (!state.boss.attackable || unit.phase !== state.boss.phase || !isInRange(unit, state.boss, 88)) {
+    if (
+      !state.boss.attackable ||
+      unit.phase !== state.boss.phase ||
+      !isInRange(unit, state.boss, COMMON_PLAYER_ABILITIES.melee.range)
+    ) {
       addLogEntry(state, `${unit.name} is too far away to land a melee strike.`, "utility");
       return false;
     }
 
-    dealDamageToBoss(state, 42, `${unit.name} slashes Kimärus for 42 damage.`);
-    addAggro(state, unit.id, 42);
-    state.cooldowns.melee = 1.1;
+    dealDamageToBoss(state, COMMON_PLAYER_ABILITIES.melee.damage, `${unit.name} slashes Kimärus for ${COMMON_PLAYER_ABILITIES.melee.damage} damage.`);
+    addAggro(state, unit.id, COMMON_PLAYER_ABILITIES.melee.bossAggro);
+    state.cooldowns.melee = COMMON_PLAYER_ABILITIES.melee.cooldown;
     return true;
   }
 
   if (abilityId === "ranged") {
     if (addTarget) {
-      dealDamageToAdd(state, addTarget, 26, `${unit.name} shoots ${addTarget.name} for 26 damage.`);
-      addAggro(state, unit.id, 16);
-      state.cooldowns.ranged = 1.8;
+      dealDamageToAdd(state, addTarget, COMMON_PLAYER_ABILITIES.ranged.damage, `${unit.name} shoots ${addTarget.name} for ${COMMON_PLAYER_ABILITIES.ranged.damage} damage.`);
+      addAggro(state, unit.id, COMMON_PLAYER_ABILITIES.ranged.addAggro);
+      state.cooldowns.ranged = COMMON_PLAYER_ABILITIES.ranged.cooldown;
       return true;
     }
 
@@ -467,9 +424,9 @@ export function useAbility(state: GameState, abilityId: AbilityId): boolean {
       return false;
     }
 
-    dealDamageToBoss(state, 26, `${unit.name} lands a ranged hit on Kimärus for 26 damage.`);
-    addAggro(state, unit.id, 26);
-    state.cooldowns.ranged = 1.8;
+    dealDamageToBoss(state, COMMON_PLAYER_ABILITIES.ranged.damage, `${unit.name} lands a ranged hit on Kimärus for ${COMMON_PLAYER_ABILITIES.ranged.damage} damage.`);
+    addAggro(state, unit.id, COMMON_PLAYER_ABILITIES.ranged.bossAggro);
+    state.cooldowns.ranged = COMMON_PLAYER_ABILITIES.ranged.cooldown;
     return true;
   }
 
@@ -520,19 +477,19 @@ export function getHudSnapshot(state: GameState): HudSnapshot {
       {
         id: "melee",
         slotLabel: "1",
-        name: "Melee Attack",
-        description: "Heavy damage up close. Prioritises active adds.",
+        name: COMMON_PLAYER_ABILITIES.melee.name,
+        description: COMMON_PLAYER_ABILITIES.melee.description,
         cooldownRemaining: state.cooldowns.melee,
-        cooldownDuration: 1.1,
+        cooldownDuration: COMMON_PLAYER_ABILITIES.melee.cooldown,
         ready: state.cooldowns.melee <= 0,
       },
       {
         id: "ranged",
         slotLabel: "2",
-        name: "Ranged Attack",
-        description: "Reliable ranged damage. Prioritises active adds.",
+        name: COMMON_PLAYER_ABILITIES.ranged.name,
+        description: COMMON_PLAYER_ABILITIES.ranged.description,
         cooldownRemaining: state.cooldowns.ranged,
-        cooldownDuration: 1.8,
+        cooldownDuration: COMMON_PLAYER_ABILITIES.ranged.cooldown,
         ready: state.cooldowns.ranged <= 0,
       },
       {
@@ -590,14 +547,14 @@ function tickBossMovement(state: GameState, deltaSeconds: number): void {
   }
 
   if (state.phase === "intermission") {
-    moveBossTowardPoint(state.boss, 640, 92, deltaSeconds);
+    moveBossTowardPoint(state.boss, KIMARUS_BOSS.intermissionRetreat.x, KIMARUS_BOSS.intermissionRetreat.y, deltaSeconds);
     return;
   }
 
   const targetUnit = getBossTargetUnit(state);
 
   if (!targetUnit) {
-    moveBossTowardPoint(state.boss, 640, 324, deltaSeconds);
+    moveBossTowardPoint(state.boss, KIMARUS_BOSS.idleAnchor.x, KIMARUS_BOSS.idleAnchor.y, deltaSeconds);
     return;
   }
 
@@ -818,21 +775,21 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
   if (spellId === "alndust_upheaval") {
     return {
       spellId,
-      label: "Alndust Upheaval",
-      timeRemaining: 5,
-      totalDuration: 5,
+      label: ALNDUST_UPHEAVAL.label,
+      timeRemaining: ALNDUST_UPHEAVAL.castTime,
+      totalDuration: ALNDUST_UPHEAVAL.castTime,
       payload: {
         targetTankId: bossTargetUnit.id,
       },
       telegraph: {
         id: crypto.randomUUID(),
-        label: "Alndust Upheaval",
+        label: ALNDUST_UPHEAVAL.label,
         shape: "circle",
         x: bossTargetUnit.x,
         y: bossTargetUnit.y,
-        radius: 70,
-        timeRemaining: 5,
-        totalDuration: 5,
+        radius: ALNDUST_UPHEAVAL.telegraphRadius,
+        timeRemaining: ALNDUST_UPHEAVAL.castTime,
+        totalDuration: ALNDUST_UPHEAVAL.castTime,
       },
     };
   }
@@ -843,20 +800,20 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
 
     return {
       spellId,
-      label: "Rending Tear",
-      timeRemaining: 2.5,
-      totalDuration: 2.5,
+      label: RENDING_TEAR.label,
+      timeRemaining: RENDING_TEAR.castTime,
+      totalDuration: RENDING_TEAR.castTime,
       telegraph: {
         id: crypto.randomUUID(),
-        label: "Rending Tear",
+        label: RENDING_TEAR.label,
         shape: "line",
         x: state.boss.x,
         y: state.boss.y,
         width: Math.hypot(dx, dy),
-        height: 84,
+        height: RENDING_TEAR.telegraphHeight,
         angle: Math.atan2(dy, dx),
-        timeRemaining: 2.5,
-        totalDuration: 2.5,
+        timeRemaining: RENDING_TEAR.castTime,
+        totalDuration: RENDING_TEAR.castTime,
       },
     };
   }
@@ -864,9 +821,9 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
   if (spellId === "consume") {
     return {
       spellId,
-      label: "Consume",
-      timeRemaining: 2.5,
-      totalDuration: 2.5,
+      label: CONSUME.label,
+      timeRemaining: CONSUME.castTime,
+      totalDuration: CONSUME.castTime,
       telegraph: null,
     };
   }
@@ -876,20 +833,20 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
 
     return {
       spellId,
-      label: "Corrupted Devastation",
-      timeRemaining: 5,
-      totalDuration: 5,
+      label: CORRUPTED_DEVASTATION.label,
+      timeRemaining: CORRUPTED_DEVASTATION.castTime,
+      totalDuration: CORRUPTED_DEVASTATION.castTime,
       telegraph: {
         id: crypto.randomUUID(),
-        label: "Corrupted Devastation",
+        label: CORRUPTED_DEVASTATION.label,
         shape: "line",
-        x: 640,
+        x: KIMARUS_BOSS.spawn.x,
         y: lane,
-        width: 1120,
-        height: 92,
+        width: CORRUPTED_DEVASTATION.width,
+        height: CORRUPTED_DEVASTATION.height,
         angle: 0,
-        timeRemaining: 5,
-        totalDuration: 5,
+        timeRemaining: CORRUPTED_DEVASTATION.castTime,
+        totalDuration: CORRUPTED_DEVASTATION.castTime,
       },
     };
   }
@@ -897,27 +854,27 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
   if (spellId === "ravenous_dive") {
     return {
       spellId,
-      label: "Ravenous Dive",
-      timeRemaining: 5,
-      totalDuration: 5,
+      label: RAVENOUS_DIVE.label,
+      timeRemaining: RAVENOUS_DIVE.castTime,
+      totalDuration: RAVENOUS_DIVE.castTime,
       telegraph: {
         id: crypto.randomUUID(),
-        label: "Ravenous Dive",
+        label: RAVENOUS_DIVE.label,
         shape: "circle",
         x: state.boss.x,
         y: state.boss.y,
-        radius: 160,
-        timeRemaining: 5,
-        totalDuration: 5,
+        radius: RAVENOUS_DIVE.telegraphRadius,
+        timeRemaining: RAVENOUS_DIVE.castTime,
+        totalDuration: RAVENOUS_DIVE.castTime,
       },
     };
   }
 
   return {
     spellId,
-    label: "Rift Emergence",
-    timeRemaining: 3,
-    totalDuration: 3,
+    label: RIFT_EMERGENCE.label,
+    timeRemaining: RIFT_EMERGENCE.castTime,
+    totalDuration: RIFT_EMERGENCE.castTime,
     telegraph: null,
   };
 }
@@ -987,7 +944,7 @@ function resolveAlndustUpheaval(state: GameState, activeSpell: ActiveSpell): voi
     }
 
     state.pendingConsumeAfterRift = true;
-    state.consumeDelay = 15;
+    state.consumeDelay = ALNDUST_UPHEAVAL.consumeDelayAfterSoak;
     addLogEntry(state, "Consume is primed and will resolve in 15 seconds.", "utility");
 
     if (DEBUG_ENCOUNTER) {
@@ -1001,7 +958,7 @@ function resolveAlndustUpheaval(state: GameState, activeSpell: ActiveSpell): voi
   }
 
   for (const unit of state.units) {
-    applyDamageToUnit(state, unit, 26);
+    applyDamageToUnit(state, unit, ALNDUST_UPHEAVAL.failureDamage);
   }
 
   if (DEBUG_ENCOUNTER) {
@@ -1016,9 +973,9 @@ function resolveAlndustUpheaval(state: GameState, activeSpell: ActiveSpell): voi
 function spawnRiftAdds(state: GameState): void {
   const targetTankId = state.lastAlndustTankId;
   state.adds.push(
-    createAdd("colossal_horror", 472, 470, "rift", targetTankId),
-    createAdd("swarming_shade", 804, 190, "rift", targetTankId),
-    createAdd("swarming_shade", 850, 458, "rift", targetTankId),
+    ...RIFT_EMERGENCE.spawnPoints.map((spawnPoint) =>
+      createAdd(spawnPoint.kind, spawnPoint.x, spawnPoint.y, "rift", targetTankId),
+    ),
   );
   const targetTank = targetTankId
     ? state.units.find((unit) => unit.id === targetTankId && unit.role === "tank")
@@ -1055,7 +1012,7 @@ function resolveRendingTear(state: GameState, activeSpell: ActiveSpell): void {
   }
 
   for (const unit of hitUnits) {
-    applyDamageToUnit(state, unit, 28);
+    applyDamageToUnit(state, unit, RENDING_TEAR.damage);
   }
 
   addLogEntry(state, `Rending Tear slices through ${hitUnits.map((unit) => unit.name).join(", ")}.`, "damage");
@@ -1140,8 +1097,20 @@ function resolveCorruptedDevastation(state: GameState, activeSpell: ActiveSpell)
   }
 
   state.adds.push(
-    createAdd("swarming_shade", 240 + Math.random() * 120, telegraph.y - 22, "material", null),
-    createAdd("swarming_shade", 980 - Math.random() * 120, telegraph.y + 22, "material", null),
+    createAdd(
+      "swarming_shade",
+      CORRUPTED_DEVASTATION.spawnPoints.leftXMin + Math.random() * CORRUPTED_DEVASTATION.spawnPoints.leftXRange,
+      telegraph.y - CORRUPTED_DEVASTATION.spawnPoints.yOffset,
+      "material",
+      null,
+    ),
+    createAdd(
+      "swarming_shade",
+      CORRUPTED_DEVASTATION.spawnPoints.rightXMax - Math.random() * CORRUPTED_DEVASTATION.spawnPoints.rightXRange,
+      telegraph.y + CORRUPTED_DEVASTATION.spawnPoints.yOffset,
+      "material",
+      null,
+    ),
   );
 
   addLogEntry(
@@ -1172,8 +1141,8 @@ function resolveRavenousDive(state: GameState): void {
   state.boss.attackable = true;
   state.boss.phase = "material";
   state.boss.energy = 0;
-  state.boss.x = 640;
-  state.boss.y = 188;
+  state.boss.x = KIMARUS_BOSS.reentry.x;
+  state.boss.y = KIMARUS_BOSS.reentry.y;
   for (const unit of state.units) {
     unit.phase = "material";
   }
@@ -1226,7 +1195,7 @@ function tickAdds(state: GameState, deltaSeconds: number): void {
 }
 
 function tickRaidAutoAttacks(state: GameState): void {
-  if (state.raidAutoAttackTimer < 1.15) {
+  if (state.raidAutoAttackTimer < SUPPORT_RAID_DAMAGE.tickInterval) {
     return;
   }
 
@@ -1244,8 +1213,20 @@ function tickRaidAutoAttacks(state: GameState): void {
         continue;
       }
 
-      totalDamage += unit.role === "healer" ? 2 : unit.role === "tank" ? 3 : 6;
-      addAggro(state, unit.id, unit.role === "healer" ? 3 : unit.role === "tank" ? 10 : 8);
+      totalDamage += unit.role === "healer"
+        ? SUPPORT_RAID_DAMAGE.add.healer
+        : unit.role === "tank"
+          ? SUPPORT_RAID_DAMAGE.add.tank
+          : SUPPORT_RAID_DAMAGE.add.damage;
+      addAggro(
+        state,
+        unit.id,
+        unit.role === "healer"
+          ? SUPPORT_RAID_DAMAGE.aggro.add.healer
+          : unit.role === "tank"
+            ? SUPPORT_RAID_DAMAGE.aggro.add.tank
+            : SUPPORT_RAID_DAMAGE.aggro.add.damage,
+      );
     }
 
     dealDamageToAdd(state, targetAdd, totalDamage);
@@ -1263,8 +1244,20 @@ function tickRaidAutoAttacks(state: GameState): void {
       continue;
     }
 
-    totalDamage += unit.role === "healer" ? 4 : unit.role === "tank" ? 7 : 9;
-    addAggro(state, unit.id, unit.role === "healer" ? 2 : unit.role === "tank" ? 9 : 7);
+    totalDamage += unit.role === "healer"
+      ? SUPPORT_RAID_DAMAGE.boss.healer
+      : unit.role === "tank"
+        ? SUPPORT_RAID_DAMAGE.boss.tank
+        : SUPPORT_RAID_DAMAGE.boss.damage;
+    addAggro(
+      state,
+      unit.id,
+      unit.role === "healer"
+        ? SUPPORT_RAID_DAMAGE.aggro.boss.healer
+        : unit.role === "tank"
+          ? SUPPORT_RAID_DAMAGE.aggro.boss.tank
+          : SUPPORT_RAID_DAMAGE.aggro.boss.damage,
+    );
   }
 
   dealDamageToBoss(state, totalDamage);
@@ -1274,24 +1267,23 @@ function useRoleAbility(state: GameState, unit: Unit): boolean {
   const addTarget = getPrimaryAddTarget(state);
 
   if (unit.role === "tank") {
-    state.cooldowns.role = 7;
+    state.cooldowns.role = TANK_ROLE_ABILITY.cooldown;
 
     if (addTarget) {
-      dealDamageToAdd(state, addTarget, 24, `${unit.name} slams ${addTarget.name} and braces for impact.`);
-      addAggro(state, unit.id, 36);
+      dealDamageToAdd(state, addTarget, TANK_ROLE_ABILITY.addDamage, `${unit.name} slams ${addTarget.name} and braces for impact.`);
+      addAggro(state, unit.id, TANK_ROLE_ABILITY.addAggro);
     } else if (state.boss.attackable && unit.phase === state.boss.phase) {
-      dealDamageToBoss(state, 18, `${unit.name} uses Guard Slam on Kimärus.`);
-      addAggro(state, unit.id, 90);
+      dealDamageToBoss(state, TANK_ROLE_ABILITY.bossDamage, `${unit.name} uses Guard Slam on Kimärus.`);
+      addAggro(state, unit.id, TANK_ROLE_ABILITY.bossAggro);
     }
 
-    unit.hp = Math.min(unit.maxHp, unit.hp + 8);
+    unit.hp = Math.min(unit.maxHp, unit.hp + TANK_ROLE_ABILITY.selfHeal);
     return true;
   }
 
   if (unit.role === "healer") {
     const target = getLowestHealthUnit(state.units);
-    const healAmount = 34;
-    const healedFor = Math.min(healAmount, target.maxHp - target.hp);
+    const healedFor = Math.min(HEALER_ROLE_ABILITY.healAmount, target.maxHp - target.hp);
 
     if (healedFor <= 0) {
       addLogEntry(state, `${unit.name} finds no urgent healing target.`, "utility");
@@ -1299,20 +1291,20 @@ function useRoleAbility(state: GameState, unit: Unit): boolean {
     }
 
     target.hp += healedFor;
-    state.cooldowns.role = 4.5;
-    addAggro(state, unit.id, 18);
+    state.cooldowns.role = HEALER_ROLE_ABILITY.cooldown;
+    addAggro(state, unit.id, HEALER_ROLE_ABILITY.aggro);
     addLogEntry(state, `${unit.name} restores ${healedFor} health to ${target.name}.`, "heal");
     return true;
   }
 
-  state.cooldowns.role = 5.5;
+  state.cooldowns.role = DAMAGE_ROLE_ABILITY.cooldown;
 
   if (addTarget) {
-    dealDamageToAdd(state, addTarget, 64, `${unit.name} unloads Dreamburst into ${addTarget.name}.`);
-    addAggro(state, unit.id, 24);
+    dealDamageToAdd(state, addTarget, DAMAGE_ROLE_ABILITY.damage, `${unit.name} unloads Dreamburst into ${addTarget.name}.`);
+    addAggro(state, unit.id, DAMAGE_ROLE_ABILITY.addAggro);
   } else if (state.boss.attackable && unit.phase === state.boss.phase) {
-    dealDamageToBoss(state, 64, `${unit.name} unleashes Dreamburst on Kimärus.`);
-    addAggro(state, unit.id, 64);
+    dealDamageToBoss(state, DAMAGE_ROLE_ABILITY.damage, `${unit.name} unleashes Dreamburst on Kimärus.`);
+    addAggro(state, unit.id, DAMAGE_ROLE_ABILITY.bossAggro);
   }
 
   return true;
@@ -1321,14 +1313,14 @@ function useRoleAbility(state: GameState, unit: Unit): boolean {
 function applyInsatiable(state: GameState, stackCount: number, text: string): void {
   state.boss.damageBoostStacks += stackCount;
 
-  const raidDamage = 80 * stackCount;
+  const raidDamage = KIMARUS_BOSS.consumeDamagePerAdd * stackCount;
 
   for (const unit of state.units) {
     applyDamageToUnit(state, unit, raidDamage);
   }
 
   const missingHealth = state.boss.maxHp - state.boss.hp;
-  const healAmount = Math.min(missingHealth, 90 * stackCount);
+  const healAmount = Math.min(missingHealth, KIMARUS_BOSS.insatiableBossHealPerAdd * stackCount);
   state.boss.hp = Math.min(state.boss.maxHp, state.boss.hp + healAmount);
 
   addLogEntry(state, `${text} Insatiable surges to ${state.boss.damageBoostStacks} stack(s).`, "damage");
@@ -1434,32 +1426,32 @@ function createAdd(kind: AddKind, x: number, y: number, phase: PhaseLayer, targe
     return {
       id: crypto.randomUUID(),
       kind,
-      name: "Colossal Horror",
+      name: COLOSSAL_HORROR.name,
       phase,
       targetTankId,
       x,
       y,
-      radius: 26,
-      speed: 24,
-      hp: 180,
-      maxHp: 180,
-      color: "#8f7cbb",
+      radius: COLOSSAL_HORROR.radius,
+      speed: COLOSSAL_HORROR.speed,
+      hp: COLOSSAL_HORROR.hp,
+      maxHp: COLOSSAL_HORROR.maxHp,
+      color: COLOSSAL_HORROR.color,
     };
   }
 
   return {
     id: crypto.randomUUID(),
     kind,
-    name: "Swarming Shade",
+    name: SWARMING_SHADE.name,
     phase,
     targetTankId,
     x,
     y,
-    radius: 14,
-    speed: 58,
-    hp: 56,
-    maxHp: 56,
-    color: "#7397d7",
+    radius: SWARMING_SHADE.radius,
+    speed: SWARMING_SHADE.speed,
+    hp: SWARMING_SHADE.hp,
+    maxHp: SWARMING_SHADE.maxHp,
+    color: SWARMING_SHADE.color,
   };
 }
 
@@ -1491,8 +1483,13 @@ function addAggro(state: GameState, unitId: string, amount: number): void {
 
 function seedAggroAfterDive(state: GameState): void {
   for (const unit of state.units) {
-    const baseline =
-      unit.role === "tank" ? (unit.id === "tank-1" ? 140 : 110) : unit.role === "damage" ? 36 : 24;
+    const baseline = unit.role === "tank"
+      ? unit.id === "tank-1"
+        ? KIMARUS_BOSS.reengageAggro.tank1
+        : KIMARUS_BOSS.reengageAggro.tank2
+      : unit.role === "damage"
+        ? KIMARUS_BOSS.reengageAggro.damage
+        : KIMARUS_BOSS.reengageAggro.healer;
     state.aggro[unit.id] = Math.max(state.aggro[unit.id] ?? 0, baseline);
   }
 }
@@ -1645,17 +1642,8 @@ function isInsideLine(
 }
 
 function pickIntermissionLane(state: GameState): number {
-  const sequence = (state.spellCastCounts.corrupted_devastation ?? 0) % 3;
-
-  if (sequence === 0) {
-    return 210;
-  }
-
-  if (sequence === 1) {
-    return 360;
-  }
-
-  return 510;
+  const sequence = (state.spellCastCounts.corrupted_devastation ?? 0) % CORRUPTED_DEVASTATION.laneSequence.length;
+  return CORRUPTED_DEVASTATION.laneSequence[sequence];
 }
 
 function addLogEntry(
@@ -1695,26 +1683,14 @@ function getRoleActionName(role: Role): string {
 
 function getRoleAction(role: Role): { name: string; description: string; cooldown: number } {
   if (role === "tank") {
-    return {
-      name: "Guard Slam",
-      description: "Extra control and damage into adds, with a small self-heal.",
-      cooldown: 7,
-    };
+    return TANK_ROLE_ABILITY;
   }
 
   if (role === "healer") {
-    return {
-      name: "Verdant Mend",
-      description: "Smart-heal the ally missing the most health.",
-      cooldown: 4.5,
-    };
+    return HEALER_ROLE_ABILITY;
   }
 
-  return {
-    name: "Dreamburst",
-    description: "High burst damage into adds or the boss.",
-    cooldown: 5.5,
-  };
+  return DAMAGE_ROLE_ABILITY;
 }
 
 function getSpellPriority(spellId: SpellId): number {
