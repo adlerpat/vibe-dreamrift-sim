@@ -165,6 +165,19 @@ export class Game {
       height: WORLD_HEIGHT,
       elapsedSeconds,
       phaseVeilActive: getSelectedUnit(this.state).phase === "rift",
+      bossAnchor: {
+        x: this.state.boss.x,
+        y: this.state.boss.y,
+        radius: this.state.boss.radius,
+      },
+      activeCast: this.state.activeSpell
+        ? {
+            spellId: this.state.activeSpell.spellId,
+            label: this.state.activeSpell.label,
+            timeRemaining: this.state.activeSpell.timeRemaining,
+            totalDuration: this.state.activeSpell.totalDuration,
+          }
+        : null,
       activeTelegraph: this.state.activeSpell?.telegraph ?? null,
     });
     renderUnits(this.context, {

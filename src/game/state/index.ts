@@ -276,12 +276,41 @@ function tickActiveSpell(state: GameState, deltaSeconds: number): void {
     state.activeSpell.telegraph.timeRemaining = state.activeSpell.timeRemaining;
   }
 
+  syncActiveSpellTelegraph(state);
+
   if (state.activeSpell.timeRemaining > 0) {
     return;
   }
 
   resolveSpell(state, state.activeSpell);
   state.activeSpell = null;
+}
+
+function syncActiveSpellTelegraph(state: GameState): void {
+  if (!state.activeSpell?.telegraph) {
+    return;
+  }
+
+  if (state.activeSpell.spellId !== "alndust_upheaval") {
+    return;
+  }
+
+  const targetTankId = typeof state.activeSpell.payload?.targetTankId === "string"
+    ? state.activeSpell.payload.targetTankId
+    : null;
+
+  if (!targetTankId) {
+    return;
+  }
+
+  const targetTank = state.units.find((unit) => unit.id === targetTankId && unit.role === "tank");
+
+  if (!targetTank) {
+    return;
+  }
+
+  state.activeSpell.telegraph.x = targetTank.x;
+  state.activeSpell.telegraph.y = targetTank.y;
 }
 
 function tickIntermissionSequence(state: GameState, deltaSeconds: number): void {

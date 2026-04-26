@@ -3,6 +3,17 @@ type RoomRenderState = {
   height: number;
   elapsedSeconds: number;
   phaseVeilActive: boolean;
+  bossAnchor: {
+    x: number;
+    y: number;
+    radius: number;
+  };
+  activeCast: {
+    spellId: string;
+    label: string;
+    timeRemaining: number;
+    totalDuration: number;
+  } | null;
   activeTelegraph: {
     label: string;
     shape: "circle" | "line";
@@ -18,7 +29,7 @@ type RoomRenderState = {
 };
 
 export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderState): void {
-  const { width, height, elapsedSeconds, activeTelegraph, phaseVeilActive } = state;
+  const { width, height, elapsedSeconds, activeCast, activeTelegraph, bossAnchor, phaseVeilActive } = state;
 
   context.clearRect(0, 0, width, height);
 
@@ -32,7 +43,9 @@ export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderS
   drawVignette(context, width, height);
   drawArenaFloor(context, width, height, elapsedSeconds);
   drawPhaseVeil(context, width, height, elapsedSeconds, phaseVeilActive);
+  drawConsumeEffect(context, width, height, elapsedSeconds, activeCast, bossAnchor);
   drawTelegraph(context, activeTelegraph, elapsedSeconds);
+  drawCastBanner(context, activeCast, bossAnchor);
 }
 
 function drawVignette(context: CanvasRenderingContext2D, width: number, height: number): void {
@@ -179,12 +192,94 @@ function drawTelegraph(
     context.strokeRect(-telegraph.width / 2, -telegraph.height / 2, telegraph.width, telegraph.height);
   }
 
-  context.fillStyle = "rgba(255, 240, 244, 0.92)";
-  context.font = "700 14px Trebuchet MS";
+  context.restore();
+}
+
+function drawCastBanner(
+  context: CanvasRenderingContext2D,
+  activeCast: RoomRenderState["activeCast"],
+  bossAnchor: RoomRenderState["bossAnchor"],
+): void {
+  if (!activeCast) {
+    return;
+  }
+
+  const progress = activeCast.totalDuration <= 0 ? 0 : 1 - activeCast.timeRemaining / activeCast.totalDuration;
+  const panelWidth = 228;
+  const panelHeight = 42;
+  const panelX = bossAnchor.x - panelWidth / 2;
+  const hpBarY = bossAnchor.y - bossAnchor.radius - 26;
+  const preferredY = hpBarY - panelHeight - 10;
+  const panelY = preferredY < 10 ? bossAnchor.y + bossAnchor.radius + 22 : preferredY;
+
+  context.save();
+  context.fillStyle = "rgba(5, 10, 14, 0.78)";
+  roundRect(context, panelX, panelY, panelWidth, panelHeight, 16);
+  context.fill();
+
+  context.fillStyle = activeCast.spellId === "consume" ? "rgba(108, 198, 255, 0.28)" : "rgba(218, 88, 118, 0.24)";
+  roundRect(context, panelX, panelY, panelWidth * Math.max(0.06, progress), panelHeight, 16);
+  context.fill();
+
+  context.strokeStyle = "rgba(244, 229, 200, 0.18)";
+  context.lineWidth = 1;
+  roundRect(context, panelX, panelY, panelWidth, panelHeight, 16);
+  context.stroke();
+
+  context.fillStyle = "rgba(255, 245, 232, 0.96)";
   context.textAlign = "center";
-  const labelY = telegraph.shape === "circle" && telegraph.radius ? telegraph.y - telegraph.radius - 12 : telegraph.y - 54;
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.fillText(telegraph.label, telegraph.x, labelY);
+  context.font = "700 15px Trebuchet MS";
+  context.fillText(activeCast.label, bossAnchor.x, panelY + 17);
+  context.font = "600 12px Trebuchet MS";
+  context.fillStyle = "rgba(228, 236, 242, 0.84)";
+  context.fillText(`${activeCast.timeRemaining.toFixed(1)}s`, bossAnchor.x, panelY + 32);
+  context.restore();
+}
+
+function drawConsumeEffect(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  elapsedSeconds: number,
+  activeCast: RoomRenderState["activeCast"],
+  bossAnchor: RoomRenderState["bossAnchor"],
+): void {
+  if (!activeCast || activeCast.spellId !== "consume") {
+    return;
+  }
+
+  const pulse = 0.16 + (Math.sin(elapsedSeconds * 8) + 1) * 0.05;
+  const progress = activeCast.totalDuration <= 0 ? 0 : 1 - activeCast.timeRemaining / activeCast.totalDuration;
+
+  context.save();
+
+  const veil = context.createRadialGradient(
+    bossAnchor.x,
+    bossAnchor.y,
+    80,
+    bossAnchor.x,
+    bossAnchor.y,
+    width * 0.52,
+  );
+  veil.addColorStop(0, `rgba(70, 214, 255, ${0.02 + progress * 0.06})`);
+  veil.addColorStop(0.55, `rgba(20, 98, 132, ${pulse})`);
+  veil.addColorStop(1, `rgba(4, 10, 16, ${0.38 + progress * 0.12})`);
+  context.fillStyle = veil;
+  context.fillRect(0, 0, width, height);
+
+  context.translate(bossAnchor.x, bossAnchor.y);
+  context.strokeStyle = `rgba(144, 225, 255, ${0.18 + progress * 0.24})`;
+  context.lineWidth = 2;
+
+  for (let i = 0; i < 10; i += 1) {
+    const angle = elapsedSeconds * 1.6 + i * (Math.PI * 2 / 10);
+    const outer = 220 + Math.sin(elapsedSeconds * 4 + i) * 12;
+    const inner = 88 + progress * 24;
+    context.beginPath();
+    context.moveTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+    context.lineTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    context.stroke();
+  }
 
   context.restore();
 }
