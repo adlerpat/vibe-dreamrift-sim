@@ -1,4 +1,17 @@
+import chimaerusIdleUrl from "../sprites/chimaerus/chimaerus_idle.png";
+import damageIdleUrl from "../sprites/dd/dd_idle.png";
+import healIdleUrl from "../sprites/heal/heal_idle.png";
+import tankIdleUrl from "../sprites/tank/tank_idle.png";
 import type { Boss, EncounterAdd, Unit } from "../game/state/types";
+
+const bossSprite = new Image();
+bossSprite.src = chimaerusIdleUrl;
+
+const roleSprites: Record<Unit["role"], HTMLImageElement> = {
+  tank: createSprite(tankIdleUrl),
+  damage: createSprite(damageIdleUrl),
+  healer: createSprite(healIdleUrl),
+};
 
 type UnitRenderState = {
   units: Unit[];
@@ -59,21 +72,31 @@ function drawAdds(context: CanvasRenderingContext2D, adds: EncounterAdd[], selec
 }
 
 function drawBoss(context: CanvasRenderingContext2D, boss: Boss): void {
-  context.fillStyle = "#8f324a";
+  context.fillStyle = "rgba(143, 50, 74, 0.16)";
   context.beginPath();
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.fill();
 
+  if (bossSprite.complete) {
+    const spriteScale = 3.15;
+    const spriteWidth = boss.radius * spriteScale;
+    const spriteHeight = spriteWidth * (bossSprite.naturalHeight / bossSprite.naturalWidth);
+    const spriteX = boss.x - spriteWidth / 2;
+    const spriteY = boss.y + boss.radius - spriteHeight;
+
+    context.drawImage(bossSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  } else {
+    context.fillStyle = "#8f324a";
+    context.beginPath();
+    context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
+    context.fill();
+  }
+
   context.strokeStyle = boss.attackable ? "rgba(255, 219, 226, 0.52)" : "rgba(199, 205, 218, 0.34)";
-  context.lineWidth = 2;
+  context.lineWidth = 3;
   context.beginPath();
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.stroke();
-
-  context.fillStyle = "rgba(255, 240, 244, 0.9)";
-  context.font = "600 14px Trebuchet MS";
-  context.textAlign = "center";
-  context.fillText("Boss", boss.x, boss.y + 5);
 
   drawBar(context, {
     x: boss.x - 70,
@@ -97,10 +120,7 @@ function drawUnit(context: CanvasRenderingContext2D, unit: Unit, isSelected: boo
     context.stroke();
   }
 
-  context.fillStyle = unit.color;
-  context.beginPath();
-  context.arc(unit.x, unit.y, unit.radius, 0, Math.PI * 2);
-  context.fill();
+  const sprite = roleSprites[unit.role];
 
   context.strokeStyle = "rgba(243, 237, 226, 0.48)";
   context.lineWidth = 2;
@@ -108,10 +128,24 @@ function drawUnit(context: CanvasRenderingContext2D, unit: Unit, isSelected: boo
   context.arc(unit.x, unit.y, unit.radius, 0, Math.PI * 2);
   context.stroke();
 
-  context.fillStyle = "#091118";
-  context.font = "700 12px Trebuchet MS";
-  context.textAlign = "center";
-  context.fillText(getRoleShortLabel(unit.role), unit.x, unit.y + 4);
+  if (sprite.complete) {
+    const spriteWidth = unit.radius * 3;
+    const spriteHeight = spriteWidth * (sprite.naturalHeight / sprite.naturalWidth);
+    const spriteX = unit.x - spriteWidth / 2;
+    const spriteY = unit.y + unit.radius - spriteHeight;
+
+    context.drawImage(sprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  } else {
+    context.fillStyle = unit.color;
+    context.beginPath();
+    context.arc(unit.x, unit.y, unit.radius, 0, Math.PI * 2);
+    context.fill();
+
+    context.fillStyle = "#091118";
+    context.font = "700 12px Trebuchet MS";
+    context.textAlign = "center";
+    context.fillText(getRoleShortLabel(unit.role), unit.x, unit.y + 4);
+  }
 
   context.fillStyle = "rgba(255, 247, 234, 0.9)";
   context.font = isSelected ? "700 14px Trebuchet MS" : "500 13px Trebuchet MS";
@@ -140,6 +174,12 @@ function getRoleShortLabel(role: Unit["role"]): string {
   }
 
   return "H";
+}
+
+function createSprite(source: string): HTMLImageElement {
+  const image = new Image();
+  image.src = source;
+  return image;
 }
 
 function drawBar(
