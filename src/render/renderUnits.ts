@@ -1,11 +1,12 @@
 import chimaerusIdleUrl from "../sprites/chimaerus/chimaerus_idle.png";
+import chimaerusFlyUrl from "../sprites/chimaerus/chimaerus_fly.png";
 import damageIdleUrl from "../sprites/dd/dd_idle.png";
 import healIdleUrl from "../sprites/heal/heal_idle.png";
 import tankIdleUrl from "../sprites/tank/tank_idle.png";
 import type { Boss, EncounterAdd, Unit } from "../game/state/types";
 
-const bossSprite = new Image();
-bossSprite.src = chimaerusIdleUrl;
+const bossIdleSprite = createSprite(chimaerusIdleUrl);
+const bossFlySprite = createSprite(chimaerusFlyUrl);
 
 const roleSprites: Record<Unit["role"], HTMLImageElement> = {
   tank: createSprite(tankIdleUrl),
@@ -77,6 +78,8 @@ function drawBoss(context: CanvasRenderingContext2D, boss: Boss, units: Unit[]):
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.fill();
 
+  const bossSprite = boss.attackable ? bossIdleSprite : bossFlySprite;
+
   if (bossSprite.complete) {
     const targetUnit = units.find((unit) => unit.id === boss.targetUnitId) ?? null;
     const facingLeft = targetUnit ? targetUnit.x < boss.x : false;
@@ -86,6 +89,7 @@ function drawBoss(context: CanvasRenderingContext2D, boss: Boss, units: Unit[]):
     const spriteY = boss.y + boss.radius - spriteHeight;
 
     context.save();
+    context.globalAlpha = boss.attackable ? 1 : 0.8;
     if (facingLeft) {
       context.translate(boss.x, 0);
       context.scale(-1, 1);
