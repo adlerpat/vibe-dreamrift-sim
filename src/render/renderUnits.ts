@@ -22,12 +22,12 @@ type UnitRenderState = {
 };
 
 export function renderUnits(context: CanvasRenderingContext2D, state: UnitRenderState): void {
-  drawBoss(context, state.boss);
+  drawBoss(context, state.boss, state.units);
   drawAdds(context, state.adds, state.selectedUnitPhase);
 
   for (const unit of state.units) {
     const isSelected = unit.id === state.selectedUnitId;
-    drawUnit(context, unit, isSelected);
+    drawUnit(context, unit, isSelected, state.boss, state.adds);
   }
 }
 
@@ -71,20 +71,29 @@ function drawAdds(context: CanvasRenderingContext2D, adds: EncounterAdd[], selec
   }
 }
 
-function drawBoss(context: CanvasRenderingContext2D, boss: Boss): void {
+function drawBoss(context: CanvasRenderingContext2D, boss: Boss, units: Unit[]): void {
   context.fillStyle = "rgba(143, 50, 74, 0.16)";
   context.beginPath();
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.fill();
 
   if (bossSprite.complete) {
+    const targetUnit = units.find((unit) => unit.id === boss.targetUnitId) ?? null;
+    const facingLeft = targetUnit ? targetUnit.x < boss.x : false;
     const spriteScale = 3.15;
     const spriteWidth = boss.radius * spriteScale;
     const spriteHeight = spriteWidth * (bossSprite.naturalHeight / bossSprite.naturalWidth);
-    const spriteX = boss.x - spriteWidth / 2;
     const spriteY = boss.y + boss.radius - spriteHeight;
 
-    context.drawImage(bossSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+    context.save();
+    if (facingLeft) {
+      context.translate(boss.x, 0);
+      context.scale(-1, 1);
+      context.drawImage(bossSprite, -spriteWidth / 2, spriteY, spriteWidth, spriteHeight);
+    } else {
+      context.drawImage(bossSprite, boss.x - spriteWidth / 2, spriteY, spriteWidth, spriteHeight);
+    }
+    context.restore();
   } else {
     context.fillStyle = "#8f324a";
     context.beginPath();
@@ -111,7 +120,13 @@ function drawBoss(context: CanvasRenderingContext2D, boss: Boss): void {
   });
 }
 
-function drawUnit(context: CanvasRenderingContext2D, unit: Unit, isSelected: boolean): void {
+function drawUnit(
+  context: CanvasRenderingContext2D,
+  unit: Unit,
+  isSelected: boolean,
+  boss: Boss,
+  adds: EncounterAdd[],
+): void {
   if (isSelected) {
     context.strokeStyle = "rgba(255, 241, 184, 0.85)";
     context.lineWidth = 4;
@@ -151,6 +166,11 @@ function drawUnit(context: CanvasRenderingContext2D, unit: Unit, isSelected: boo
   context.font = isSelected ? "700 14px Trebuchet MS" : "500 13px Trebuchet MS";
   context.fillText(unit.name, unit.x, unit.y - unit.radius - 12);
 
+  const facingTarget = getUnitFacingTarget(unit, boss, adds);
+  if (facingTarget) {
+    drawFacingArrow(context, unit, facingTarget.x, facingTarget.y);
+  }
+
   drawBar(context, {
     x: unit.x - 24,
     y: unit.y + unit.radius + 8,
@@ -180,6 +200,57 @@ function createSprite(source: string): HTMLImageElement {
   const image = new Image();
   image.src = source;
   return image;
+}
+
+function getUnitFacingTarget(
+  unit: Unit,
+  boss: Boss,
+  adds: EncounterAdd[],
+): { x: number; y: number } | null {
+  const attackableAdds = adds.filter((add) => add.phase === unit.phase);
+
+  if (attackableAdds.length > 0) {
+    const nearestAdd = attackableAdds.reduce((nearest, current) =>
+      getDistanceSquared(unit.x, unit.y, current.x, current.y) <
+        getDistanceSquared(unit.x, unit.y, nearest.x, nearest.y)
+        ? current
+        : nearest
+    );
+
+    return { x: nearestAdd.x, y: nearestAdd.y };
+  }
+
+  if (boss.attackable && boss.phase === unit.phase) {
+    return { x: boss.x, y: boss.y };
+  }
+
+  return null;
+}
+
+function drawFacingArrow(context: CanvasRenderingContext2D, unit: Unit, targetX: number, targetY: number): void {
+  const angle = Math.atan2(targetY - unit.y, targetX - unit.x);
+  const orbitRadius = unit.radius + 12;
+  const arrowX = unit.x + Math.cos(angle) * orbitRadius;
+  const arrowY = unit.y + Math.sin(angle) * orbitRadius;
+
+  context.save();
+  context.translate(arrowX, arrowY);
+  context.rotate(angle);
+  context.fillStyle = "rgba(201, 240, 227, 0.95)";
+  context.beginPath();
+  context.moveTo(7, 0);
+  context.lineTo(-4, -4);
+  context.lineTo(-1, 0);
+  context.lineTo(-4, 4);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+function getDistanceSquared(ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  return dx * dx + dy * dy;
 }
 
 function drawBar(
