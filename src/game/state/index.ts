@@ -1,282 +1,59 @@
 import {
   chimaerusConfig,
-  type EncounterPhase,
   type ScheduledSpellConfig,
   type SpellId,
-} from "../data/bosses/chimaerus";
-import { COLOSSAL_HORROR } from "../data/actors/adds/colossal-horror";
-import { SWARMING_SHADE } from "../data/actors/adds/swarming-shade";
-import { KIMARUS_BOSS } from "../data/actors/bosses/kimarus";
-import { ALNDUST_UPHEAVAL } from "../data/actors/bosses/kimarus/spells/alndustUpheaval";
-import { CONSUME } from "../data/actors/bosses/kimarus/spells/consume";
-import { CORRUPTED_DEVASTATION } from "../data/actors/bosses/kimarus/spells/corruptedDevastation";
-import { RAVENOUS_DIVE } from "../data/actors/bosses/kimarus/spells/ravenousDive";
-import { RENDING_TEAR } from "../data/actors/bosses/kimarus/spells/rendingTear";
-import { RIFT_EMERGENCE } from "../data/actors/bosses/kimarus/spells/riftEmergence";
-import { COMMON_PLAYER_ABILITIES, SUPPORT_RAID_DAMAGE } from "../data/actors/players/common";
-import { DAMAGE_ARCHETYPE, DAMAGE_ROLE_ABILITY, DAMAGE_UNITS } from "../data/actors/players/damage";
-import { HEALER_ARCHETYPE, HEALER_ROLE_ABILITY, HEALER_UNITS } from "../data/actors/players/healer";
-import { TANK_ARCHETYPE, TANK_ROLE_ABILITY, TANK_UNITS } from "../data/actors/players/tank";
+} from "../../data/bosses/chimaerus";
+import { KIMARUS_BOSS } from "../../data/actors/bosses/kimarus";
+import { ALNDUST_UPHEAVAL } from "../../data/actors/bosses/kimarus/spells/alndustUpheaval";
+import { CONSUME } from "../../data/actors/bosses/kimarus/spells/consume";
+import { CORRUPTED_DEVASTATION } from "../../data/actors/bosses/kimarus/spells/corruptedDevastation";
+import { RAVENOUS_DIVE } from "../../data/actors/bosses/kimarus/spells/ravenousDive";
+import { RENDING_TEAR } from "../../data/actors/bosses/kimarus/spells/rendingTear";
+import { RIFT_EMERGENCE } from "../../data/actors/bosses/kimarus/spells/riftEmergence";
+import { COMMON_PLAYER_ABILITIES, SUPPORT_RAID_DAMAGE } from "../../data/actors/players/common";
+import { DAMAGE_ROLE_ABILITY } from "../../data/actors/players/damage";
+import { HEALER_ROLE_ABILITY } from "../../data/actors/players/healer";
+import { TANK_ROLE_ABILITY } from "../../data/actors/players/tank";
+import { createAdd } from "../encounter/factories";
+import {
+  hasAddReachedBoss,
+  isInAddRange,
+  isInRange,
+  isInsideCircle,
+  isInsideLine,
+  moveBossTowardPoint,
+  moveBossTowardUnit,
+} from "../encounter/geometry";
+import { pickIntermissionLane, releaseRaidFromRift, tickAddMovement } from "../encounter/adds";
+import { addLogEntry, debugEncounter } from "../encounter/logging";
+import { getRoleActionName } from "../encounter/roles";
+import { resetCooldowns, selectUnitForMode } from "../encounter/selection";
+import {
+  addAggro,
+  getBossTargetUnit,
+  getLivingTanks,
+  getLowestHealthUnit,
+  getPrimaryAddTarget,
+  handOffBossAggroToOtherTank,
+  hasRaidWiped,
+  seedAggroAfterDive,
+} from "../encounter/targeting";
+import { createInitialState } from "./initialState";
+import { getHudSnapshot } from "./hud";
+import { getSelectedUnit, getSelectionSummary } from "./selectors";
+import type {
+  AbilityId,
+  ActiveSpell,
+  EncounterAdd,
+  GameMode,
+  GameState,
+  QueuedSpell,
+  SelectionSummary,
+  Unit,
+} from "./types";
 
-export type Role = "tank" | "damage" | "healer";
-export type GameMode = Role | "raidleader";
-export type AbilityId = "melee" | "ranged" | "role";
-export type TelegraphShape = "circle" | "line";
-export type AddKind = "colossal_horror" | "swarming_shade";
-export type PhaseLayer = "material" | "rift";
-
-export type Unit = {
-  id: string;
-  name: string;
-  role: Role;
-  phase: PhaseLayer;
-  x: number;
-  y: number;
-  radius: number;
-  speed: number;
-  color: string;
-  hp: number;
-  maxHp: number;
-  pendingRecoverySeconds: number;
-};
-
-export type Boss = {
-  name: string;
-  x: number;
-  y: number;
-  radius: number;
-  speed: number;
-  phase: PhaseLayer;
-  hp: number;
-  maxHp: number;
-  energy: number;
-  visible: boolean;
-  attackable: boolean;
-  damageBoostStacks: number;
-  targetUnitId: string | null;
-};
-
-export type EncounterAdd = {
-  id: string;
-  kind: AddKind;
-  name: string;
-  phase: PhaseLayer;
-  targetTankId: string | null;
-  x: number;
-  y: number;
-  radius: number;
-  speed: number;
-  hp: number;
-  maxHp: number;
-  color: string;
-};
-
-export type GroundTelegraph = {
-  id: string;
-  label: string;
-  shape: TelegraphShape;
-  x: number;
-  y: number;
-  radius?: number;
-  width?: number;
-  height?: number;
-  angle?: number;
-  timeRemaining: number;
-  totalDuration: number;
-};
-
-export type ActiveSpell = {
-  spellId: SpellId;
-  label: string;
-  timeRemaining: number;
-  totalDuration: number;
-  telegraph: GroundTelegraph | null;
-  payload?: Record<string, string | number>;
-};
-
-export type QueuedSpell = {
-  spellId: SpellId;
-  source: "cooldown" | "chance_window" | "follow_up" | "energy" | "phase_timer";
-  priority: number;
-};
-
-export type CombatLogEntry = {
-  id: string;
-  text: string;
-  emphasis?: "damage" | "heal" | "utility";
-};
-
-export type AbilityView = {
-  id: AbilityId;
-  slotLabel: "1" | "2" | "3";
-  name: string;
-  description: string;
-  cooldownRemaining: number;
-  cooldownDuration: number;
-  ready: boolean;
-};
-
-export type HudSnapshot = {
-  unitName: string;
-  roleLabel: string;
-  unitHp: number;
-  unitMaxHp: number;
-  bossName: string;
-  bossHp: number;
-  bossMaxHp: number;
-  encounterFinished: boolean;
-  bossCastLabel: string | null;
-  bossCastRemaining: number;
-  selectedUnitPhase: PhaseLayer;
-  raidFrames: Array<{
-    id: string;
-    name: string;
-    roleLabel: string;
-    hp: number;
-    maxHp: number;
-    healthPercent: number;
-    color: string;
-  }>;
-  abilities: AbilityView[];
-  logEntries: CombatLogEntry[];
-};
-
-export type GameState = {
-  mode: GameMode;
-  selectedUnitId: string;
-  units: Unit[];
-  boss: Boss;
-  aggro: Record<string, number>;
-  adds: EncounterAdd[];
-  cooldowns: Record<AbilityId, number>;
-  logEntries: CombatLogEntry[];
-  encounterFinished: boolean;
-  encounterTime: number;
-  phase: EncounterPhase;
-  phaseTime: number;
-  activeSpell: ActiveSpell | null;
-  spellQueue: QueuedSpell[];
-  spellCooldowns: Record<string, number>;
-  spellCastCounts: Record<string, number>;
-  spellChanceCheckTimers: Record<string, number>;
-  spellPhaseFlags: Record<string, boolean>;
-  raidAutoAttackTimer: number;
-  lastAlndustTankId: string | null;
-  pendingConsumeAfterRift: boolean;
-  consumeDelay: number;
-  intermissionDevastationsRemaining: number;
-  intermissionSpellDelay: number;
-  pendingRavenousDive: boolean;
-};
-
-export type SelectionSummary = {
-  selectedRole: GameMode;
-  unitId: string;
-  unitName: string;
-  roleLabel: string;
-  hintText: string;
-};
-
-const MAX_LOG_ENTRIES = 5;
-const DEBUG_ENCOUNTER = true;
-
-function createPlayerUnit(
-  unit: { id: string; name: string; x: number; y: number; color: string },
-  archetype: { role: Role; radius: number; speed: number; hp: number; maxHp: number },
-  _startingAggro: number,
-): Unit {
-  return {
-    id: unit.id,
-    name: unit.name,
-    role: archetype.role,
-    phase: "material",
-    x: unit.x,
-    y: unit.y,
-    radius: archetype.radius,
-    speed: archetype.speed,
-    color: unit.color,
-    hp: archetype.hp,
-    maxHp: archetype.maxHp,
-    pendingRecoverySeconds: 0,
-  };
-}
-
-export function createInitialState(): GameState {
-  const units: Unit[] = [
-    ...TANK_UNITS.map((unit, index) => createPlayerUnit(unit, TANK_ARCHETYPE, index === 0 ? TANK_ARCHETYPE.startingAggro.primary : TANK_ARCHETYPE.startingAggro.secondary)),
-    ...DAMAGE_UNITS.map((unit) => createPlayerUnit(unit, DAMAGE_ARCHETYPE, DAMAGE_ARCHETYPE.startingAggro)),
-    ...HEALER_UNITS.map((unit) => createPlayerUnit(unit, HEALER_ARCHETYPE, HEALER_ARCHETYPE.startingAggro)),
-  ];
-
-  return {
-    mode: "damage",
-    selectedUnitId: "damage-1",
-    units,
-    boss: {
-      name: KIMARUS_BOSS.name,
-      x: KIMARUS_BOSS.spawn.x,
-      y: KIMARUS_BOSS.spawn.y,
-      radius: KIMARUS_BOSS.radius,
-      speed: KIMARUS_BOSS.speed,
-      phase: "material",
-      hp: KIMARUS_BOSS.hp,
-      maxHp: KIMARUS_BOSS.maxHp,
-      energy: 0,
-      visible: true,
-      attackable: true,
-      damageBoostStacks: 0,
-      targetUnitId: KIMARUS_BOSS.startingTargetUnitId,
-    },
-    aggro: {
-      "tank-1": TANK_ARCHETYPE.startingAggro.primary,
-      "tank-2": TANK_ARCHETYPE.startingAggro.secondary,
-      "damage-1": DAMAGE_ARCHETYPE.startingAggro,
-      "damage-2": DAMAGE_ARCHETYPE.startingAggro,
-      "healer-1": HEALER_ARCHETYPE.startingAggro,
-      "healer-2": HEALER_ARCHETYPE.startingAggro,
-    },
-    adds: [],
-    cooldowns: {
-      melee: 0,
-      ranged: 0,
-      role: 0,
-    },
-    logEntries: [
-      {
-        id: crypto.randomUUID(),
-        text: "Kimärus stirs. Watch for Alndust Upheaval and stop the adds before they reach him.",
-        emphasis: "utility",
-      },
-    ],
-    encounterFinished: false,
-    encounterTime: 0,
-    phase: "phase_1",
-    phaseTime: 0,
-    activeSpell: null,
-    spellQueue: [],
-    spellCooldowns: {},
-    spellCastCounts: {},
-    spellChanceCheckTimers: {},
-    spellPhaseFlags: {},
-    raidAutoAttackTimer: 0,
-    lastAlndustTankId: null,
-    pendingConsumeAfterRift: false,
-    consumeDelay: 0,
-    intermissionDevastationsRemaining: 0,
-    intermissionSpellDelay: 0,
-    pendingRavenousDive: false,
-  };
-}
-
-export function getSelectedUnit(state: GameState): Unit {
-  const selectedUnit = state.units.find((unit) => unit.id === state.selectedUnitId);
-
-  if (!selectedUnit) {
-    throw new Error(`Selected unit "${state.selectedUnitId}" was not found.`);
-  }
-
-  return selectedUnit;
-}
+export { createInitialState, getHudSnapshot, getSelectedUnit, getSelectionSummary };
+export type * from "./types";
 
 export function setGameMode(state: GameState, mode: GameMode): SelectionSummary {
   state.mode = mode;
@@ -381,7 +158,7 @@ export function useAbility(state: GameState, abilityId: AbilityId): boolean {
   }
 
   const unit = getSelectedUnit(state);
-  const addTarget = getPrimaryAddTarget(state);
+  const addTarget = getPrimaryAddTarget(state, unit);
 
   if (abilityId === "melee") {
     if (addTarget) {
@@ -431,79 +208,6 @@ export function useAbility(state: GameState, abilityId: AbilityId): boolean {
   }
 
   return useRoleAbility(state, unit);
-}
-
-export function getSelectionSummary(state: GameState): SelectionSummary {
-  const unit = getSelectedUnit(state);
-
-  return {
-    selectedRole: state.mode,
-    unitId: unit.id,
-    unitName: unit.name,
-    roleLabel: getRoleLabel(unit.role),
-    hintText:
-      state.mode === "raidleader"
-        ? "Raidleader mode can move one raider at a time for now. Press Tab to cycle through the raid."
-        : `Move ${unit.name} with WASD and use 1, 2, and 3 to handle Kimärus's casts and add waves.`,
-  };
-}
-
-export function getHudSnapshot(state: GameState): HudSnapshot {
-  const unit = getSelectedUnit(state);
-  const roleAction = getRoleAction(unit.role);
-
-  return {
-    unitName: unit.name,
-    roleLabel: getRoleLabel(unit.role),
-    unitHp: unit.hp,
-    unitMaxHp: unit.maxHp,
-    bossName: state.boss.name,
-    bossHp: state.boss.hp,
-    bossMaxHp: state.boss.maxHp,
-    encounterFinished: state.encounterFinished,
-    bossCastLabel: state.activeSpell?.label ?? null,
-    bossCastRemaining: state.activeSpell?.timeRemaining ?? 0,
-    selectedUnitPhase: unit.phase,
-    raidFrames: state.units.map((raidUnit) => ({
-      id: raidUnit.id,
-      name: raidUnit.name,
-      roleLabel: getRoleLabel(raidUnit.role),
-      hp: raidUnit.hp,
-      maxHp: raidUnit.maxHp,
-      healthPercent: raidUnit.maxHp <= 0 ? 0 : (raidUnit.hp / raidUnit.maxHp) * 100,
-      color: raidUnit.color,
-    })),
-    abilities: [
-      {
-        id: "melee",
-        slotLabel: "1",
-        name: COMMON_PLAYER_ABILITIES.melee.name,
-        description: COMMON_PLAYER_ABILITIES.melee.description,
-        cooldownRemaining: state.cooldowns.melee,
-        cooldownDuration: COMMON_PLAYER_ABILITIES.melee.cooldown,
-        ready: state.cooldowns.melee <= 0,
-      },
-      {
-        id: "ranged",
-        slotLabel: "2",
-        name: COMMON_PLAYER_ABILITIES.ranged.name,
-        description: COMMON_PLAYER_ABILITIES.ranged.description,
-        cooldownRemaining: state.cooldowns.ranged,
-        cooldownDuration: COMMON_PLAYER_ABILITIES.ranged.cooldown,
-        ready: state.cooldowns.ranged <= 0,
-      },
-      {
-        id: "role",
-        slotLabel: "3",
-        name: roleAction.name,
-        description: roleAction.description,
-        cooldownRemaining: state.cooldowns.role,
-        cooldownDuration: roleAction.cooldown,
-        ready: state.cooldowns.role <= 0,
-      },
-    ],
-    logEntries: state.logEntries,
-  };
 }
 
 function tickSpellCooldowns(state: GameState, deltaSeconds: number): void {
@@ -618,19 +322,15 @@ function tickPendingConsume(state: GameState, deltaSeconds: number): void {
   }
 
   if (state.activeSpell || state.spellQueue.some((spell) => spell.spellId === "consume")) {
-    if (DEBUG_ENCOUNTER) {
-      debugEncounter(
-        `consume waiting: active=${state.activeSpell?.spellId ?? "none"} queue=${state.spellQueue.map((spell) => spell.spellId).join(",") || "empty"}`,
-      );
-    }
+    debugEncounter(
+      `consume waiting: active=${state.activeSpell?.spellId ?? "none"} queue=${state.spellQueue.map((spell) => spell.spellId).join(",") || "empty"}`,
+    );
     return;
   }
 
   queueSpellById(state, "consume", "follow_up");
   state.pendingConsumeAfterRift = false;
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`consume queued at ${state.encounterTime.toFixed(1)}s`);
-  }
+  debugEncounter(`consume queued at ${state.encounterTime.toFixed(1)}s`);
 }
 
 function tickPassiveRecovery(state: GameState, deltaSeconds: number): void {
@@ -740,9 +440,7 @@ function queueSpellById(state: GameState, spellId: SpellId, source: QueuedSpell[
     priority: getSpellPriority(spellId),
   });
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`queued ${spellId} via ${source}`);
-  }
+  debugEncounter(`queued ${spellId} via ${source}`);
 }
 
 function startNextQueuedSpell(state: GameState): void {
@@ -759,9 +457,7 @@ function startNextQueuedSpell(state: GameState): void {
 
   state.activeSpell = createActiveSpell(state, nextSpell.spellId);
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`start ${nextSpell.spellId}`);
-  }
+  debugEncounter(`start ${nextSpell.spellId}`);
 
   if (nextSpell.spellId === "consume") {
     beginConsumeCast(state);
@@ -882,9 +578,7 @@ function createActiveSpell(state: GameState, spellId: SpellId): ActiveSpell {
 function resolveSpell(state: GameState, activeSpell: ActiveSpell): void {
   state.spellCastCounts[activeSpell.spellId] = (state.spellCastCounts[activeSpell.spellId] ?? 0) + 1;
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`resolve ${activeSpell.spellId}`);
-  }
+  debugEncounter(`resolve ${activeSpell.spellId}`);
 
   if (activeSpell.spellId === "alndust_upheaval") {
     resolveAlndustUpheaval(state, activeSpell);
@@ -947,11 +641,9 @@ function resolveAlndustUpheaval(state: GameState, activeSpell: ActiveSpell): voi
     state.consumeDelay = ALNDUST_UPHEAVAL.consumeDelayAfterSoak;
     addLogEntry(state, "Consume is primed and will resolve in 15 seconds.", "utility");
 
-    if (DEBUG_ENCOUNTER) {
-      debugEncounter(
-        `upheaval soaked: tank=${targetTankId ?? "none"} soakers=${soakingUnits.map((unit) => unit.name).join(",")} consume=${state.pendingConsumeAfterRift ? `${state.consumeDelay}s` : "no"}`,
-      );
-    }
+    debugEncounter(
+      `upheaval soaked: tank=${targetTankId ?? "none"} soakers=${soakingUnits.map((unit) => unit.name).join(",")} consume=${state.pendingConsumeAfterRift ? `${state.consumeDelay}s` : "no"}`,
+    );
 
     addLogEntry(state, `Alndust Upheaval is soaked by ${soakingUnits.map((unit) => unit.name).join(", ")}.`, "utility");
     return;
@@ -961,11 +653,9 @@ function resolveAlndustUpheaval(state: GameState, activeSpell: ActiveSpell): voi
     applyDamageToUnit(state, unit, ALNDUST_UPHEAVAL.failureDamage);
   }
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(
-      `upheaval failed: tank=${targetTankId ?? "none"} soakers=${soakingUnits.map((unit) => unit.name).join(",") || "none"}`,
-    );
-  }
+  debugEncounter(
+    `upheaval failed: tank=${targetTankId ?? "none"} soakers=${soakingUnits.map((unit) => unit.name).join(",") || "none"}`,
+  );
 
   addLogEntry(state, "Alndust Upheaval was under-soaked and rocks the raid.", "damage");
 }
@@ -988,9 +678,7 @@ function spawnRiftAdds(state: GameState): void {
     "utility",
   );
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`rift adds spawned for tank=${targetTankId ?? "none"}`);
-  }
+  debugEncounter(`rift adds spawned for tank=${targetTankId ?? "none"}`);
 }
 
 function resolveRendingTear(state: GameState, activeSpell: ActiveSpell): void {
@@ -1021,9 +709,7 @@ function resolveRendingTear(state: GameState, activeSpell: ActiveSpell): void {
 function resolveConsume(state: GameState): void {
   const addCount = state.adds.length;
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter(`consume resolve: addsAlive=${addCount} at ${state.encounterTime.toFixed(1)}s`);
-  }
+  debugEncounter(`consume resolve: addsAlive=${addCount} at ${state.encounterTime.toFixed(1)}s`);
 
   if (addCount > 0) {
     applyInsatiable(state, addCount, "Consume devours lingering Manifestations before the intermission.");
@@ -1072,9 +758,7 @@ function beginConsumeCast(state: GameState): void {
     add.targetTankId = null;
   }
 
-  if (DEBUG_ENCOUNTER) {
-    debugEncounter("consume cast began: raid and adds returned to boss phase");
-  }
+  debugEncounter("consume cast began: raid and adds returned to boss phase");
 }
 
 function resolveCorruptedDevastation(state: GameState, activeSpell: ActiveSpell): void {
@@ -1203,7 +887,7 @@ function tickRaidAutoAttacks(state: GameState): void {
 
   const selectedUnit = getSelectedUnit(state);
   const supportingRaid = state.units.filter((unit) => unit.id !== selectedUnit.id);
-  const targetAdd = getPrimaryAddTarget(state);
+  const targetAdd = getPrimaryAddTarget(state, selectedUnit);
 
   if (targetAdd) {
     let totalDamage = 0;
@@ -1264,7 +948,7 @@ function tickRaidAutoAttacks(state: GameState): void {
 }
 
 function useRoleAbility(state: GameState, unit: Unit): boolean {
-  const addTarget = getPrimaryAddTarget(state);
+  const addTarget = getPrimaryAddTarget(state, unit);
 
   if (unit.role === "tank") {
     state.cooldowns.role = TANK_ROLE_ABILITY.cooldown;
@@ -1337,60 +1021,6 @@ function applyDamageToUnit(state: GameState, unit: Unit, amount: number): void {
   unit.pendingRecoverySeconds = 2;
 }
 
-function getLowestHealthUnit(units: Unit[]): Unit {
-  return units.reduce((lowest, current) => {
-    const currentMissing = current.maxHp - current.hp;
-    const lowestMissing = lowest.maxHp - lowest.hp;
-    return currentMissing > lowestMissing ? current : lowest;
-  });
-}
-
-function hasRaidWiped(state: GameState): boolean {
-  return state.units.every((unit) => unit.hp <= 0);
-}
-
-function selectUnitForMode(state: GameState, mode: GameMode): Unit {
-  if (mode === "raidleader") {
-    return getSelectedUnit(state);
-  }
-
-  const matchingUnit = state.units.find((unit) => unit.role === mode);
-
-  if (!matchingUnit) {
-    throw new Error(`No unit found for mode "${mode}".`);
-  }
-
-  return matchingUnit;
-}
-
-function resetCooldowns(state: GameState): void {
-  state.cooldowns.melee = 0;
-  state.cooldowns.ranged = 0;
-  state.cooldowns.role = 0;
-}
-
-function getPrimaryAddTarget(state: GameState): EncounterAdd | null {
-  if (state.adds.length === 0) {
-    return null;
-  }
-
-  const selectedUnit = getSelectedUnit(state);
-  const attackableAdds = state.adds.filter((add) => add.phase === selectedUnit.phase);
-
-  if (attackableAdds.length === 0) {
-    return null;
-  }
-
-  return [...attackableAdds].sort((left, right) => {
-    if (left.kind !== right.kind) {
-      return left.kind === "swarming_shade" ? -1 : 1;
-    }
-
-    return distanceBetween(selectedUnit.x, selectedUnit.y, left.x, left.y) -
-      distanceBetween(selectedUnit.x, selectedUnit.y, right.x, right.y);
-  })[0];
-}
-
 function dealDamageToBoss(state: GameState, amount: number, logText?: string): void {
   if (!state.boss.attackable) {
     return;
@@ -1419,278 +1049,6 @@ function dealDamageToAdd(state: GameState, add: EncounterAdd, amount: number, lo
   if (add.hp <= 0) {
     addLogEntry(state, `${add.name} dies before it can reach Kimärus.`, "utility");
   }
-}
-
-function createAdd(kind: AddKind, x: number, y: number, phase: PhaseLayer, targetTankId: string | null): EncounterAdd {
-  if (kind === "colossal_horror") {
-    return {
-      id: crypto.randomUUID(),
-      kind,
-      name: COLOSSAL_HORROR.name,
-      phase,
-      targetTankId,
-      x,
-      y,
-      radius: COLOSSAL_HORROR.radius,
-      speed: COLOSSAL_HORROR.speed,
-      hp: COLOSSAL_HORROR.hp,
-      maxHp: COLOSSAL_HORROR.maxHp,
-      color: COLOSSAL_HORROR.color,
-    };
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    kind,
-    name: SWARMING_SHADE.name,
-    phase,
-    targetTankId,
-    x,
-    y,
-    radius: SWARMING_SHADE.radius,
-    speed: SWARMING_SHADE.speed,
-    hp: SWARMING_SHADE.hp,
-    maxHp: SWARMING_SHADE.maxHp,
-    color: SWARMING_SHADE.color,
-  };
-}
-
-function tickAddMovement(state: GameState, add: EncounterAdd, deltaSeconds: number): void {
-  if (add.phase === "rift") {
-    const tankTarget = getTankTargetForAdd(state, add);
-
-    if (!tankTarget) {
-      if (DEBUG_ENCOUNTER) {
-        debugEncounter(`rift add has no target: ${add.name} targetTank=${add.targetTankId ?? "none"}`);
-      }
-      return;
-    }
-
-    moveAddTowardPoint(add, tankTarget.x, tankTarget.y, deltaSeconds);
-    return;
-  }
-
-  if (!state.boss.attackable) {
-    return;
-  }
-
-  moveAddTowardBoss(state.boss, add, deltaSeconds);
-}
-
-function addAggro(state: GameState, unitId: string, amount: number): void {
-  state.aggro[unitId] = (state.aggro[unitId] ?? 0) + amount;
-}
-
-function seedAggroAfterDive(state: GameState): void {
-  for (const unit of state.units) {
-    const baseline = unit.role === "tank"
-      ? unit.id === "tank-1"
-        ? KIMARUS_BOSS.reengageAggro.tank1
-        : KIMARUS_BOSS.reengageAggro.tank2
-      : unit.role === "damage"
-        ? KIMARUS_BOSS.reengageAggro.damage
-        : KIMARUS_BOSS.reengageAggro.healer;
-    state.aggro[unit.id] = Math.max(state.aggro[unit.id] ?? 0, baseline);
-  }
-}
-
-function getBossTargetUnit(state: GameState): Unit | null {
-  if (!state.boss.targetUnitId) {
-    return null;
-  }
-
-  return state.units.find((unit) => unit.id === state.boss.targetUnitId && unit.hp > 0) ?? null;
-}
-
-function getLivingTanks(state: GameState, phase?: PhaseLayer): Unit[] {
-  return state.units.filter((unit) => unit.role === "tank" && unit.hp > 0 && (phase ? unit.phase === phase : true));
-}
-
-function handOffBossAggroToOtherTank(state: GameState, currentTankId: string): void {
-  const currentTank = state.units.find((unit) => unit.id === currentTankId && unit.role === "tank");
-  const otherTank = state.units.find(
-    (unit) => unit.id !== currentTankId && unit.role === "tank" && unit.hp > 0 && unit.phase === "material",
-  );
-
-  if (!otherTank) {
-    return;
-  }
-
-  if (currentTank) {
-    currentTank.phase = "rift";
-    state.aggro[currentTank.id] = Math.max(0, (state.aggro[currentTank.id] ?? 0) - 120);
-  }
-
-  state.aggro[otherTank.id] = Math.max(state.aggro[otherTank.id] ?? 0, 220);
-  state.boss.targetUnitId = otherTank.id;
-}
-
-function getTankTargetForAdd(state: GameState, add: EncounterAdd): Unit | null {
-  if (add.targetTankId) {
-    const pinnedTank = state.units.find(
-      (unit) => unit.id === add.targetTankId && unit.role === "tank" && unit.hp > 0 && unit.phase === add.phase,
-    );
-
-    if (pinnedTank) {
-      return pinnedTank;
-    }
-  }
-
-  return getLivingTanks(state, add.phase)[0] ?? null;
-}
-
-function releaseRaidFromRift(state: GameState): void {
-  const strandedUnits = state.units.filter((unit) => unit.phase === "rift");
-
-  if (strandedUnits.length === 0) {
-    return;
-  }
-
-  for (const unit of strandedUnits) {
-    unit.phase = "material";
-  }
-
-  addLogEntry(
-    state,
-    `${strandedUnits.map((unit) => unit.name).join(", ")} return from the Rift as the last manifestation breaks through.`,
-    "utility",
-  );
-}
-
-function moveBossTowardUnit(boss: Boss, unit: Unit, desiredDistance: number, deltaSeconds: number): void {
-  const dx = unit.x - boss.x;
-  const dy = unit.y - boss.y;
-  const distance = Math.hypot(dx, dy) || 1;
-
-  if (distance <= desiredDistance) {
-    return;
-  }
-
-  const travelDistance = Math.min(distance - desiredDistance, boss.speed * deltaSeconds);
-  boss.x += (dx / distance) * travelDistance;
-  boss.y += (dy / distance) * travelDistance;
-}
-
-function moveBossTowardPoint(boss: Boss, x: number, y: number, deltaSeconds: number): void {
-  const dx = x - boss.x;
-  const dy = y - boss.y;
-  const distance = Math.hypot(dx, dy) || 1;
-
-  if (distance <= 4) {
-    boss.x = x;
-    boss.y = y;
-    return;
-  }
-
-  const travelDistance = Math.min(distance, boss.speed * deltaSeconds);
-  boss.x += (dx / distance) * travelDistance;
-  boss.y += (dy / distance) * travelDistance;
-}
-
-function moveAddTowardBoss(boss: Boss, add: EncounterAdd, deltaSeconds: number): void {
-  const dx = boss.x - add.x;
-  const dy = boss.y - add.y;
-  const distance = Math.hypot(dx, dy) || 1;
-  add.x += (dx / distance) * add.speed * deltaSeconds;
-  add.y += (dy / distance) * add.speed * deltaSeconds;
-}
-
-function moveAddTowardPoint(add: EncounterAdd, x: number, y: number, deltaSeconds: number): void {
-  const dx = x - add.x;
-  const dy = y - add.y;
-  const distance = Math.hypot(dx, dy) || 1;
-  const moveSpeed = add.phase === "rift" ? add.speed * 1.35 : add.speed;
-  add.x += (dx / distance) * moveSpeed * deltaSeconds;
-  add.y += (dy / distance) * moveSpeed * deltaSeconds;
-}
-
-function hasAddReachedBoss(add: EncounterAdd, boss: Boss): boolean {
-  return distanceBetween(add.x, add.y, boss.x, boss.y) <= boss.radius + add.radius + 8;
-}
-
-function isInRange(unit: Unit, boss: Boss, extraRange: number): boolean {
-  return distanceBetween(unit.x, unit.y, boss.x, boss.y) <= boss.radius + unit.radius + extraRange;
-}
-
-function isInAddRange(unit: Unit, add: EncounterAdd, extraRange: number): boolean {
-  return distanceBetween(unit.x, unit.y, add.x, add.y) <= add.radius + unit.radius + extraRange;
-}
-
-function distanceBetween(ax: number, ay: number, bx: number, by: number): number {
-  return Math.hypot(ax - bx, ay - by);
-}
-
-function isInsideCircle(unit: Unit, x: number, y: number, radius: number): boolean {
-  return distanceBetween(unit.x, unit.y, x, y) <= radius + unit.radius * 0.5;
-}
-
-function isInsideLine(
-  unit: Unit,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  angle: number,
-): boolean {
-  const translatedX = unit.x - x;
-  const translatedY = unit.y - y;
-  const rotatedX = translatedX * Math.cos(-angle) - translatedY * Math.sin(-angle);
-  const rotatedY = translatedX * Math.sin(-angle) + translatedY * Math.cos(-angle);
-
-  return Math.abs(rotatedX - width / 2) <= width / 2 + unit.radius * 0.25 &&
-    Math.abs(rotatedY) <= height / 2 + unit.radius * 0.25;
-}
-
-function pickIntermissionLane(state: GameState): number {
-  const sequence = (state.spellCastCounts.corrupted_devastation ?? 0) % CORRUPTED_DEVASTATION.laneSequence.length;
-  return CORRUPTED_DEVASTATION.laneSequence[sequence];
-}
-
-function addLogEntry(
-  state: GameState,
-  text: string,
-  emphasis: CombatLogEntry["emphasis"] = "utility",
-): void {
-  state.logEntries = [
-    {
-      id: crypto.randomUUID(),
-      text,
-      emphasis,
-    },
-    ...state.logEntries,
-  ].slice(0, MAX_LOG_ENTRIES);
-}
-
-function debugEncounter(message: string): void {
-  console.log(`[Dreamrift Debug] ${message}`);
-}
-
-function getRoleLabel(role: Role): string {
-  if (role === "damage") {
-    return "Damage Dealer";
-  }
-
-  if (role === "tank") {
-    return "Tank";
-  }
-
-  return "Healer";
-}
-
-function getRoleActionName(role: Role): string {
-  return getRoleAction(role).name;
-}
-
-function getRoleAction(role: Role): { name: string; description: string; cooldown: number } {
-  if (role === "tank") {
-    return TANK_ROLE_ABILITY;
-  }
-
-  if (role === "healer") {
-    return HEALER_ROLE_ABILITY;
-  }
-
-  return DAMAGE_ROLE_ABILITY;
 }
 
 function getSpellPriority(spellId: SpellId): number {

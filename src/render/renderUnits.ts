@@ -1,4 +1,4 @@
-import type { Boss, EncounterAdd, Unit } from "../game/state";
+import type { Boss, EncounterAdd, Unit } from "../game/state/types";
 
 type UnitRenderState = {
   units: Unit[];
