@@ -1,7 +1,11 @@
 import { defineConfig } from "vite";
 
-export default defineConfig({
+const repoName = "vibe-dreamrift-sim";
+
+export default defineConfig(({ command }) => ({
+  // GitHub Pages serves project sites from /<repo-name>/.
+  base: command === "build" ? `/${repoName}/` : "/",
   server: {
     port: 5173,
   },
-});
+}));
