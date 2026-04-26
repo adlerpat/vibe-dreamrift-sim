@@ -191,7 +191,21 @@ select {
   display: grid;
 }
 
-.defeat-panel {
+.victory-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: rgba(4, 10, 15, 0.82);
+  padding: 24px;
+}
+
+.victory-overlay.is-visible {
+  display: grid;
+}
+
+.defeat-panel,
+.victory-panel {
   width: min(420px, 100%);
   padding: 28px;
   border-radius: 24px;
@@ -208,12 +222,25 @@ select {
   line-height: 0.95;
 }
 
+.victory-title {
+  margin: 12px 0 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 0.95;
+  color: #e9f7dd;
+}
+
 .defeat-copy {
   margin: 12px 0 0;
   color: rgba(246, 240, 232, 0.78);
 }
 
-.defeat-actions {
+.victory-copy {
+  margin: 12px 0 0;
+  color: rgba(233, 247, 221, 0.8);
+}
+
+.defeat-actions,
+.victory-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -232,6 +259,28 @@ select {
 }
 
 .reselect-button {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 193, 148, 0.18);
+  background: rgba(10, 19, 28, 0.92);
+  color: #f6f0e8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.victory-chainpull-button {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(182, 227, 146, 0.22);
+  background: linear-gradient(180deg, rgba(72, 111, 60, 0.98), rgba(36, 57, 29, 1));
+  color: #efffe6;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.victory-reselect-button {
   width: 100%;
   padding: 14px 18px;
   border-radius: 18px;

@@ -52,6 +52,21 @@ app.innerHTML = `
           </div>
         </div>
       </div>
+
+      <div class="victory-overlay" aria-hidden="true">
+        <div class="victory-panel">
+          <p class="panel-label">Encounter Cleared</p>
+          <h2 class="victory-title">Victory</h2>
+          <p class="victory-copy">
+            Try <span class="victory-attempt-count">1</span> defeated Kimärus with
+            <span class="victory-role-label">Damage</span>.
+          </p>
+          <div class="victory-actions">
+            <button class="victory-chainpull-button" type="button">Chainpull</button>
+            <button class="victory-reselect-button" type="button">Reselect Role</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="game-layout">
@@ -146,6 +161,11 @@ const defeatAttemptCount = document.querySelector<HTMLElement>(".defeat-attempt-
 const defeatProgress = document.querySelector<HTMLElement>(".defeat-progress");
 const chainpullButton = document.querySelector<HTMLButtonElement>(".chainpull-button");
 const reselectButton = document.querySelector<HTMLButtonElement>(".reselect-button");
+const victoryOverlay = document.querySelector<HTMLElement>(".victory-overlay");
+const victoryAttemptCount = document.querySelector<HTMLElement>(".victory-attempt-count");
+const victoryRoleLabel = document.querySelector<HTMLElement>(".victory-role-label");
+const victoryChainpullButton = document.querySelector<HTMLButtonElement>(".victory-chainpull-button");
+const victoryReselectButton = document.querySelector<HTMLButtonElement>(".victory-reselect-button");
 const activeUnitName = document.querySelector<HTMLElement>(".active-unit-name");
 const activeUnitRole = document.querySelector<HTMLElement>(".active-unit-role");
 const activeUnitHint = document.querySelector<HTMLElement>(".active-unit-hint");
@@ -170,6 +190,11 @@ if (
   !defeatProgress ||
   !chainpullButton ||
   !reselectButton ||
+  !victoryOverlay ||
+  !victoryAttemptCount ||
+  !victoryRoleLabel ||
+  !victoryChainpullButton ||
+  !victoryReselectButton ||
   !activeUnitName ||
   !activeUnitRole ||
   !activeUnitHint ||
@@ -190,6 +215,7 @@ let pulltimerIntervalId: number | null = null;
 let attemptCount = 0;
 let hasEncounterStarted = false;
 let defeatShownForAttempt = false;
+let victoryShownForAttempt = false;
 let currentMode = selectedRole;
 let currentSelectedUnitId = "damage-1";
 const raidFrameNodes = new Map<
@@ -238,6 +264,22 @@ const game = new Game(canvas, {
       prepullOverlay.classList.remove("is-countdown");
       defeatOverlay.classList.add("is-visible");
       defeatOverlay.setAttribute("aria-hidden", "false");
+      victoryOverlay.classList.remove("is-visible");
+      victoryOverlay.setAttribute("aria-hidden", "true");
+      pulltimerOverlay.setAttribute("aria-hidden", "true");
+    }
+
+    if (encounterFinished && bossHp <= 0 && hasEncounterStarted && !victoryShownForAttempt) {
+      victoryShownForAttempt = true;
+      victoryAttemptCount.textContent = String(attemptCount);
+      victoryRoleLabel.textContent = formatRoleLabel(selectedRole);
+      prepullOverlay.classList.remove("is-hidden");
+      prepullOverlay.classList.add("is-defeat");
+      prepullOverlay.classList.remove("is-countdown");
+      victoryOverlay.classList.add("is-visible");
+      victoryOverlay.setAttribute("aria-hidden", "false");
+      defeatOverlay.classList.remove("is-visible");
+      defeatOverlay.setAttribute("aria-hidden", "true");
       pulltimerOverlay.setAttribute("aria-hidden", "true");
     }
 
@@ -329,7 +371,25 @@ chainpullButton.addEventListener("click", () => {
   startPulltimer();
 });
 
+victoryChainpullButton.addEventListener("click", () => {
+  startPulltimer();
+});
+
 reselectButton.addEventListener("click", () => {
+  resetToRoleSelect();
+});
+
+victoryReselectButton.addEventListener("click", () => {
+  resetToRoleSelect();
+});
+
+function resetToRoleSelect(): void {
+  const ensuredPrepullOverlay = prepullOverlay!;
+  const ensuredDefeatOverlay = defeatOverlay!;
+  const ensuredVictoryOverlay = victoryOverlay!;
+  const ensuredPulltimerOverlay = pulltimerOverlay!;
+  const ensuredPulltimerButton = pulltimerButton!;
+
   if (pulltimerIntervalId !== null) {
     window.clearInterval(pulltimerIntervalId);
     pulltimerIntervalId = null;
@@ -339,12 +399,15 @@ reselectButton.addEventListener("click", () => {
   game.resetEncounter(selectedRole);
   hasEncounterStarted = false;
   defeatShownForAttempt = false;
-  prepullOverlay.classList.remove("is-hidden", "is-countdown", "is-defeat");
-  defeatOverlay.classList.remove("is-visible");
-  defeatOverlay.setAttribute("aria-hidden", "true");
-  pulltimerOverlay.setAttribute("aria-hidden", "true");
-  pulltimerButton.disabled = false;
-});
+  victoryShownForAttempt = false;
+  ensuredPrepullOverlay.classList.remove("is-hidden", "is-countdown", "is-defeat");
+  ensuredDefeatOverlay.classList.remove("is-visible");
+  ensuredDefeatOverlay.setAttribute("aria-hidden", "true");
+  ensuredVictoryOverlay.classList.remove("is-visible");
+  ensuredVictoryOverlay.setAttribute("aria-hidden", "true");
+  ensuredPulltimerOverlay.setAttribute("aria-hidden", "true");
+  ensuredPulltimerButton.disabled = false;
+}
 
 actionBar.addEventListener("click", (event) => {
   const target = event.target;
@@ -445,6 +508,7 @@ function startPulltimer(): void {
 
   const ensuredPulltimerCount = pulltimerCount!;
   const ensuredDefeatOverlay = defeatOverlay!;
+  const ensuredVictoryOverlay = victoryOverlay!;
   const ensuredPrepullOverlay = prepullOverlay!;
   const ensuredPulltimerOverlay = pulltimerOverlay!;
   const ensuredPulltimerButton = pulltimerButton!;
@@ -452,9 +516,12 @@ function startPulltimer(): void {
   let remainingSeconds = 5;
   attemptCount += 1;
   defeatShownForAttempt = false;
+  victoryShownForAttempt = false;
   ensuredPulltimerCount.textContent = String(remainingSeconds);
   ensuredDefeatOverlay.classList.remove("is-visible");
   ensuredDefeatOverlay.setAttribute("aria-hidden", "true");
+  ensuredVictoryOverlay.classList.remove("is-visible");
+  ensuredVictoryOverlay.setAttribute("aria-hidden", "true");
   ensuredPrepullOverlay.classList.remove("is-hidden");
   ensuredPrepullOverlay.classList.remove("is-defeat");
   ensuredPrepullOverlay.classList.add("is-countdown");
@@ -479,6 +546,22 @@ function startPulltimer(): void {
 
     ensuredPulltimerCount.textContent = String(remainingSeconds);
   }, 1000);
+}
+
+function formatRoleLabel(role: string): string {
+  if (role === "raidleader") {
+    return "Raidleader";
+  }
+
+  if (role === "damage") {
+    return "Damage";
+  }
+
+  if (role === "tank") {
+    return "Tank";
+  }
+
+  return "Healer";
 }
 
 function syncRaidFrames(
