@@ -1,13 +1,16 @@
-import type { Boss, Unit } from "../game/state";
+import type { Boss, EncounterAdd, Unit } from "../game/state";
 
 type UnitRenderState = {
   units: Unit[];
   boss: Boss;
+  adds: EncounterAdd[];
   selectedUnitId: string;
+  selectedUnitPhase: Unit["phase"];
 };
 
 export function renderUnits(context: CanvasRenderingContext2D, state: UnitRenderState): void {
   drawBoss(context, state.boss);
+  drawAdds(context, state.adds, state.selectedUnitPhase);
 
   for (const unit of state.units) {
     const isSelected = unit.id === state.selectedUnitId;
@@ -15,22 +18,54 @@ export function renderUnits(context: CanvasRenderingContext2D, state: UnitRender
   }
 }
 
-function drawBoss(context: CanvasRenderingContext2D, boss: Boss): void {
-  const glow = context.createRadialGradient(boss.x, boss.y, 12, boss.x, boss.y, 92);
-  glow.addColorStop(0, "rgba(196, 101, 124, 0.34)");
-  glow.addColorStop(1, "rgba(196, 101, 124, 0)");
-  context.fillStyle = glow;
-  context.beginPath();
-  context.arc(boss.x, boss.y, 92, 0, Math.PI * 2);
-  context.fill();
+function drawAdds(context: CanvasRenderingContext2D, adds: EncounterAdd[], selectedUnitPhase: Unit["phase"]): void {
+  for (const add of adds) {
+    const isAttackable = add.phase === selectedUnitPhase;
+    context.globalAlpha = isAttackable ? 1 : 0.38;
+    context.fillStyle = add.phase === "rift" ? "#65a6ff" : add.color;
+    context.beginPath();
+    context.arc(add.x, add.y, add.radius, 0, Math.PI * 2);
+    context.fill();
 
+    context.strokeStyle = "rgba(235, 229, 216, 0.38)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(add.x, add.y, add.radius, 0, Math.PI * 2);
+    context.stroke();
+
+    context.fillStyle = "rgba(248, 242, 232, 0.88)";
+    context.font = "600 12px Trebuchet MS";
+    context.textAlign = "center";
+    context.fillText(
+      `${add.kind === "colossal_horror" ? "Horror" : "Shade"}${add.phase === "rift" ? " • Rift" : ""}`,
+      add.x,
+      add.y - add.radius - 10,
+    );
+
+    drawBar(context, {
+      x: add.x - 24,
+      y: add.y + add.radius + 7,
+      width: 48,
+      height: 6,
+      current: add.hp,
+      max: add.maxHp,
+      fill: add.phase === "rift" ? "#70b6ff" : add.kind === "colossal_horror" ? "#b28bda" : "#7ea7e8",
+      background: "rgba(11, 18, 24, 0.74)",
+      stroke: "rgba(252, 247, 238, 0.12)",
+    });
+
+    context.globalAlpha = 1;
+  }
+}
+
+function drawBoss(context: CanvasRenderingContext2D, boss: Boss): void {
   context.fillStyle = "#8f324a";
   context.beginPath();
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.fill();
 
-  context.strokeStyle = "rgba(255, 219, 226, 0.48)";
-  context.lineWidth = 3;
+  context.strokeStyle = boss.attackable ? "rgba(255, 219, 226, 0.52)" : "rgba(199, 205, 218, 0.34)";
+  context.lineWidth = 2;
   context.beginPath();
   context.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
   context.stroke();

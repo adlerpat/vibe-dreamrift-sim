@@ -37,6 +37,21 @@ app.innerHTML = `
           <p class="pulltimer-label">Pull in</p>
         </div>
       </div>
+
+      <div class="defeat-overlay" aria-hidden="true">
+        <div class="defeat-panel">
+          <p class="panel-label">Attempt Ended</p>
+          <h2 class="defeat-title">Defeated</h2>
+          <p class="defeat-copy">
+            Try <span class="defeat-attempt-count">1</span> ended at
+            <span class="defeat-progress">0%</span> boss health remaining.
+          </p>
+          <div class="defeat-actions">
+            <button class="chainpull-button" type="button">Chainpull</button>
+            <button class="reselect-button" type="button">Reselect Role</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="game-layout">
@@ -126,6 +141,11 @@ const prepullRoleButtons = document.querySelectorAll<HTMLButtonElement>(".prepul
 const pulltimerButton = document.querySelector<HTMLButtonElement>(".pulltimer-button");
 const pulltimerOverlay = document.querySelector<HTMLElement>(".pulltimer-overlay");
 const pulltimerCount = document.querySelector<HTMLElement>(".pulltimer-count");
+const defeatOverlay = document.querySelector<HTMLElement>(".defeat-overlay");
+const defeatAttemptCount = document.querySelector<HTMLElement>(".defeat-attempt-count");
+const defeatProgress = document.querySelector<HTMLElement>(".defeat-progress");
+const chainpullButton = document.querySelector<HTMLButtonElement>(".chainpull-button");
+const reselectButton = document.querySelector<HTMLButtonElement>(".reselect-button");
 const activeUnitName = document.querySelector<HTMLElement>(".active-unit-name");
 const activeUnitRole = document.querySelector<HTMLElement>(".active-unit-role");
 const activeUnitHint = document.querySelector<HTMLElement>(".active-unit-hint");
@@ -145,6 +165,11 @@ if (
   !pulltimerButton ||
   !pulltimerOverlay ||
   !pulltimerCount ||
+  !defeatOverlay ||
+  !defeatAttemptCount ||
+  !defeatProgress ||
+  !chainpullButton ||
+  !reselectButton ||
   !activeUnitName ||
   !activeUnitRole ||
   !activeUnitHint ||
@@ -162,9 +187,26 @@ if (
 
 let selectedRole = "damage";
 let pulltimerIntervalId: number | null = null;
+let attemptCount = 0;
+let hasEncounterStarted = false;
+let defeatShownForAttempt = false;
+let currentMode = selectedRole;
+let currentSelectedUnitId = "damage-1";
+const raidFrameNodes = new Map<
+  string,
+  {
+    button: HTMLButtonElement;
+    article: HTMLElement;
+    name: HTMLElement;
+    percent: HTMLElement;
+    fill: HTMLElement;
+  }
+>();
 
 const game = new Game(canvas, {
-  onSelectionChange: ({ unitName, roleLabel, hintText }) => {
+  onSelectionChange: ({ selectedRole, unitId, unitName, roleLabel, hintText }) => {
+    currentMode = selectedRole;
+    currentSelectedUnitId = unitId;
     activeUnitName.textContent = unitName;
     activeUnitRole.textContent = roleLabel;
     activeUnitHint.textContent = hintText;
@@ -173,6 +215,7 @@ const game = new Game(canvas, {
     abilities,
     bossCastLabel,
     bossCastRemaining,
+    encounterFinished,
     bossHp,
     bossMaxHp,
     bossName,
@@ -185,6 +228,18 @@ const game = new Game(canvas, {
     bossCastText.textContent = bossCastLabel
       ? `${bossCastLabel} • ${bossCastRemaining.toFixed(1)}s`
       : "No active cast";
+
+    if (encounterFinished && bossHp > 0 && hasEncounterStarted && !defeatShownForAttempt) {
+      defeatShownForAttempt = true;
+      defeatAttemptCount.textContent = String(attemptCount);
+      defeatProgress.textContent = `${Math.round((bossHp / bossMaxHp) * 100)}%`;
+      prepullOverlay.classList.remove("is-hidden");
+      prepullOverlay.classList.add("is-defeat");
+      prepullOverlay.classList.remove("is-countdown");
+      defeatOverlay.classList.add("is-visible");
+      defeatOverlay.setAttribute("aria-hidden", "false");
+      pulltimerOverlay.setAttribute("aria-hidden", "true");
+    }
 
     actionBar.innerHTML = abilities
       .map(
@@ -208,24 +263,7 @@ const game = new Game(canvas, {
       )
       .join("");
 
-    raidFrames.innerHTML = raidFrameEntries
-      .map(
-        (frame) => `
-          <article class="raid-frame raid-frame-${frame.roleLabel.toLowerCase().replace(" ", "-")}">
-            <div class="raid-frame-head">
-              <span class="raid-frame-name">${frame.name}</span>
-              <span class="raid-frame-percent">${Math.round(frame.healthPercent)}%</span>
-            </div>
-            <div class="raid-frame-bar">
-              <div
-                class="raid-frame-fill"
-                style="width: ${frame.healthPercent}%; background: linear-gradient(90deg, ${frame.color}, rgba(255,255,255,0.12));"
-              ></div>
-            </div>
-          </article>
-        `,
-      )
-      .join("");
+    syncRaidFrames(raidFrameEntries);
 
     combatLog.innerHTML = logEntries
       .map(
@@ -248,6 +286,7 @@ for (const button of prepullRoleButtons) {
     }
 
     selectedRole = role;
+    currentMode = role;
     game.setMode(role);
 
     for (const roleButton of prepullRoleButtons) {
@@ -257,32 +296,54 @@ for (const button of prepullRoleButtons) {
 }
 
 pulltimerButton.addEventListener("click", () => {
-  if (pulltimerIntervalId !== null) {
+  startPulltimer();
+});
+
+raidFrames.addEventListener("click", (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
     return;
   }
 
-  let remainingSeconds = 5;
-  pulltimerCount.textContent = String(remainingSeconds);
-  prepullOverlay.classList.add("is-countdown");
-  pulltimerOverlay.setAttribute("aria-hidden", "false");
-  pulltimerButton.disabled = true;
+  const frame = target.closest<HTMLButtonElement>(".raid-frame-button");
 
-  pulltimerIntervalId = window.setInterval(() => {
-    remainingSeconds -= 1;
+  if (!frame) {
+    return;
+  }
 
-    if (remainingSeconds <= 0) {
-      if (pulltimerIntervalId !== null) {
-        window.clearInterval(pulltimerIntervalId);
-        pulltimerIntervalId = null;
-      }
+  const unitId = frame.dataset.unitId;
 
-      prepullOverlay.classList.add("is-hidden");
-      game.start();
-      return;
-    }
+  if (!unitId) {
+    return;
+  }
 
-    pulltimerCount.textContent = String(remainingSeconds);
-  }, 1000);
+  if (!game.selectRaidUnit(unitId)) {
+    return;
+  }
+
+  currentSelectedUnitId = unitId;
+});
+
+chainpullButton.addEventListener("click", () => {
+  startPulltimer();
+});
+
+reselectButton.addEventListener("click", () => {
+  if (pulltimerIntervalId !== null) {
+    window.clearInterval(pulltimerIntervalId);
+    pulltimerIntervalId = null;
+  }
+
+  game.stop();
+  game.resetEncounter(selectedRole);
+  hasEncounterStarted = false;
+  defeatShownForAttempt = false;
+  prepullOverlay.classList.remove("is-hidden", "is-countdown", "is-defeat");
+  defeatOverlay.classList.remove("is-visible");
+  defeatOverlay.setAttribute("aria-hidden", "true");
+  pulltimerOverlay.setAttribute("aria-hidden", "true");
+  pulltimerButton.disabled = false;
 });
 
 actionBar.addEventListener("click", (event) => {
@@ -375,4 +436,119 @@ for (const button of cardToggleButtons) {
     const isCollapsed = card.classList.toggle("is-collapsed");
     button.textContent = isCollapsed ? "+" : "-";
   });
+}
+
+function startPulltimer(): void {
+  if (pulltimerIntervalId !== null) {
+    return;
+  }
+
+  const ensuredPulltimerCount = pulltimerCount!;
+  const ensuredDefeatOverlay = defeatOverlay!;
+  const ensuredPrepullOverlay = prepullOverlay!;
+  const ensuredPulltimerOverlay = pulltimerOverlay!;
+  const ensuredPulltimerButton = pulltimerButton!;
+
+  let remainingSeconds = 5;
+  attemptCount += 1;
+  defeatShownForAttempt = false;
+  ensuredPulltimerCount.textContent = String(remainingSeconds);
+  ensuredDefeatOverlay.classList.remove("is-visible");
+  ensuredDefeatOverlay.setAttribute("aria-hidden", "true");
+  ensuredPrepullOverlay.classList.remove("is-hidden");
+  ensuredPrepullOverlay.classList.remove("is-defeat");
+  ensuredPrepullOverlay.classList.add("is-countdown");
+  ensuredPulltimerOverlay.setAttribute("aria-hidden", "false");
+  ensuredPulltimerButton.disabled = true;
+  game.resetEncounter(selectedRole);
+
+  pulltimerIntervalId = window.setInterval(() => {
+    remainingSeconds -= 1;
+
+    if (remainingSeconds <= 0) {
+      if (pulltimerIntervalId !== null) {
+        window.clearInterval(pulltimerIntervalId);
+        pulltimerIntervalId = null;
+      }
+
+      ensuredPrepullOverlay.classList.add("is-hidden");
+      hasEncounterStarted = true;
+      game.start();
+      return;
+    }
+
+    ensuredPulltimerCount.textContent = String(remainingSeconds);
+  }, 1000);
+}
+
+function syncRaidFrames(
+  raidFrameEntries: Array<{
+    id: string;
+    name: string;
+    roleLabel: string;
+    hp: number;
+    maxHp: number;
+    healthPercent: number;
+    color: string;
+  }>,
+): void {
+  const ensuredRaidFrames = raidFrames!;
+  const seenIds = new Set<string>();
+
+  for (const frame of raidFrameEntries) {
+    seenIds.add(frame.id);
+
+    let nodes = raidFrameNodes.get(frame.id);
+
+    if (!nodes) {
+      const button = document.createElement("button");
+      button.className = "raid-frame-button";
+      button.dataset.unitId = frame.id;
+      button.type = "button";
+
+      const article = document.createElement("article");
+      article.className = "raid-frame";
+
+      const head = document.createElement("div");
+      head.className = "raid-frame-head";
+
+      const name = document.createElement("span");
+      name.className = "raid-frame-name";
+
+      const percent = document.createElement("span");
+      percent.className = "raid-frame-percent";
+
+      const bar = document.createElement("div");
+      bar.className = "raid-frame-bar";
+
+      const fill = document.createElement("div");
+      fill.className = "raid-frame-fill";
+
+      head.append(name, percent);
+      bar.append(fill);
+      article.append(head, bar);
+      button.append(article);
+      ensuredRaidFrames.append(button);
+
+      nodes = { button, article, name, percent, fill };
+      raidFrameNodes.set(frame.id, nodes);
+    }
+
+    nodes.article.className = `raid-frame raid-frame-${frame.roleLabel.toLowerCase().replace(" ", "-")} ${
+      currentMode === "raidleader" && currentSelectedUnitId === frame.id ? "is-selected" : ""
+    }`;
+    nodes.name.textContent = frame.name;
+    nodes.percent.textContent = `${Math.round(frame.healthPercent)}%`;
+    nodes.fill.style.width = `${frame.healthPercent}%`;
+    nodes.fill.style.background = `linear-gradient(90deg, ${frame.color}, rgba(255,255,255,0.12))`;
+  }
+
+  for (const [unitId, nodes] of raidFrameNodes.entries()) {
+    if (seenIds.has(unitId)) {
+      continue;
+    }
+
+    nodes.button.remove();
+    raidFrameNodes.delete(unitId);
+  }
 }

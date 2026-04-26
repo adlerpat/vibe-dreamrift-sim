@@ -6,6 +6,7 @@ import {
   createInitialState,
   getSelectedUnit,
   getSelectionSummary,
+  selectUnitById,
   setGameMode,
   tickEncounter,
   tickCooldowns,
@@ -30,7 +31,8 @@ export class Game {
   private readonly input = new InputController();
   private animationFrameId: number | null = null;
   private lastFrameTime = 0;
-  private readonly state = createInitialState();
+  private isRunning = false;
+  private state = createInitialState();
 
   constructor(canvas: HTMLCanvasElement, options: GameOptions) {
     const context = canvas.getContext("2d");
@@ -51,19 +53,41 @@ export class Game {
   }
 
   start(): void {
+    if (this.isRunning) {
+      return;
+    }
+
     window.addEventListener("resize", this.handleResize);
     this.input.attach();
+    this.isRunning = true;
     this.animationFrameId = window.requestAnimationFrame(this.tick);
   }
 
   stop(): void {
+    if (!this.isRunning) {
+      return;
+    }
+
     window.removeEventListener("resize", this.handleResize);
     this.input.detach();
+    this.isRunning = false;
 
     if (this.animationFrameId !== null) {
       window.cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+  }
+
+  resetEncounter(mode?: string): void {
+    this.state = createInitialState();
+
+    if (mode && isGameMode(mode)) {
+      setGameMode(this.state, mode);
+    }
+
+    this.lastFrameTime = 0;
+    this.options.onSelectionChange(getSelectionSummary(this.state));
+    this.options.onHudChange(getHudSnapshot(this.state));
   }
 
   setMode(mode: string): void {
@@ -79,6 +103,17 @@ export class Game {
   triggerAbility(abilityId: AbilityId): void {
     useAbility(this.state, abilityId);
     this.options.onHudChange(getHudSnapshot(this.state));
+  }
+
+  selectRaidUnit(unitId: string): boolean {
+    if (this.state.mode !== "raidleader") {
+      return false;
+    }
+
+    const summary = selectUnitById(this.state, unitId);
+    this.options.onSelectionChange(summary);
+    this.options.onHudChange(getHudSnapshot(this.state));
+    return true;
   }
 
   private handleResize(): void {
@@ -129,12 +164,15 @@ export class Game {
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT,
       elapsedSeconds,
-      activeTelegraph: this.state.activeTelegraph,
+      phaseVeilActive: getSelectedUnit(this.state).phase === "rift",
+      activeTelegraph: this.state.activeSpell?.telegraph ?? null,
     });
     renderUnits(this.context, {
       units: this.state.units,
       boss: this.state.boss,
+      adds: this.state.adds,
       selectedUnitId: this.state.selectedUnitId,
+      selectedUnitPhase: getSelectedUnit(this.state).phase,
     });
   }
 

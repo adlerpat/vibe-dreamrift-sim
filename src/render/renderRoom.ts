@@ -2,18 +2,23 @@ type RoomRenderState = {
   width: number;
   height: number;
   elapsedSeconds: number;
+  phaseVeilActive: boolean;
   activeTelegraph: {
     label: string;
+    shape: "circle" | "line";
     x: number;
     y: number;
-    radius: number;
+    radius?: number;
+    width?: number;
+    height?: number;
+    angle?: number;
     timeRemaining: number;
     totalDuration: number;
   } | null;
 };
 
 export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderState): void {
-  const { width, height, elapsedSeconds, activeTelegraph } = state;
+  const { width, height, elapsedSeconds, activeTelegraph, phaseVeilActive } = state;
 
   context.clearRect(0, 0, width, height);
 
@@ -26,8 +31,8 @@ export function renderRoom(context: CanvasRenderingContext2D, state: RoomRenderS
 
   drawVignette(context, width, height);
   drawArenaFloor(context, width, height, elapsedSeconds);
+  drawPhaseVeil(context, width, height, elapsedSeconds, phaseVeilActive);
   drawTelegraph(context, activeTelegraph, elapsedSeconds);
-  drawBossPlatform(context, width, height);
 }
 
 function drawVignette(context: CanvasRenderingContext2D, width: number, height: number): void {
@@ -97,34 +102,25 @@ function drawArenaFloor(
   context.stroke();
 }
 
-function drawBossPlatform(context: CanvasRenderingContext2D, width: number, height: number): void {
-  const centerX = width / 2;
-  const centerY = height / 2 - 36;
+function drawPhaseVeil(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  elapsedSeconds: number,
+  phaseVeilActive: boolean,
+): void {
+  if (!phaseVeilActive) {
+    return;
+  }
 
-  const glow = context.createRadialGradient(centerX, centerY, 24, centerX, centerY, 150);
-  glow.addColorStop(0, "rgba(154, 238, 187, 0.22)");
-  glow.addColorStop(1, "rgba(154, 238, 187, 0)");
-  context.fillStyle = glow;
-  context.beginPath();
-  context.arc(centerX, centerY, 150, 0, Math.PI * 2);
-  context.fill();
+  const shimmer = 0.18 + (Math.sin(elapsedSeconds * 3.2) + 1) * 0.04;
+  const veil = context.createLinearGradient(0, 0, width, height);
+  veil.addColorStop(0, `rgba(90, 158, 255, ${shimmer})`);
+  veil.addColorStop(0.5, `rgba(106, 210, 255, ${shimmer + 0.03})`);
+  veil.addColorStop(1, `rgba(74, 118, 235, ${shimmer})`);
 
-  context.fillStyle = "#132732";
-  context.beginPath();
-  context.ellipse(centerX, centerY, 124, 92, 0, 0, Math.PI * 2);
-  context.fill();
-
-  context.strokeStyle = "rgba(217, 232, 199, 0.32)";
-  context.lineWidth = 3;
-  context.beginPath();
-  context.ellipse(centerX, centerY, 124, 92, 0, 0, Math.PI * 2);
-  context.stroke();
-
-  context.strokeStyle = "rgba(129, 205, 166, 0.3)";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.ellipse(centerX, centerY, 78, 54, 0, 0, Math.PI * 2);
-  context.stroke();
+  context.fillStyle = veil;
+  context.fillRect(0, 0, width, height);
 }
 
 function drawTelegraph(
@@ -141,27 +137,54 @@ function drawTelegraph(
 
   context.save();
 
-  context.fillStyle = `rgba(196, 70, 96, ${0.16 + (1 - progress) * 0.14})`;
-  context.beginPath();
-  context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
-  context.fill();
+  if (telegraph.shape === "circle" && telegraph.radius) {
+    context.fillStyle = `rgba(196, 70, 96, ${0.16 + (1 - progress) * 0.14})`;
+    context.beginPath();
+    context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
+    context.fill();
 
-  context.strokeStyle = `rgba(248, 172, 190, ${pulse})`;
-  context.lineWidth = 4;
-  context.beginPath();
-  context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
-  context.stroke();
+    context.strokeStyle = `rgba(248, 172, 190, ${pulse})`;
+    context.lineWidth = 4;
+    context.beginPath();
+    context.arc(telegraph.x, telegraph.y, telegraph.radius, 0, Math.PI * 2);
+    context.stroke();
 
-  context.strokeStyle = "rgba(255, 226, 233, 0.24)";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.arc(telegraph.x, telegraph.y, telegraph.radius * Math.max(0.18, progress), 0, Math.PI * 2);
-  context.stroke();
+    context.strokeStyle = "rgba(255, 226, 233, 0.24)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(
+      telegraph.x,
+      telegraph.y,
+      telegraph.radius * Math.max(0.18, progress),
+      0,
+      Math.PI * 2,
+    );
+    context.stroke();
+  }
+
+  if (
+    telegraph.shape === "line" &&
+    telegraph.width !== undefined &&
+    telegraph.height !== undefined &&
+    telegraph.angle !== undefined
+  ) {
+    context.translate(telegraph.x, telegraph.y);
+    context.rotate(telegraph.angle);
+
+    context.fillStyle = `rgba(196, 70, 96, ${0.14 + (1 - progress) * 0.12})`;
+    context.fillRect(-telegraph.width / 2, -telegraph.height / 2, telegraph.width, telegraph.height);
+
+    context.strokeStyle = `rgba(248, 172, 190, ${pulse})`;
+    context.lineWidth = 3;
+    context.strokeRect(-telegraph.width / 2, -telegraph.height / 2, telegraph.width, telegraph.height);
+  }
 
   context.fillStyle = "rgba(255, 240, 244, 0.92)";
   context.font = "700 14px Trebuchet MS";
   context.textAlign = "center";
-  context.fillText(telegraph.label, telegraph.x, telegraph.y - telegraph.radius - 12);
+  const labelY = telegraph.shape === "circle" && telegraph.radius ? telegraph.y - telegraph.radius - 12 : telegraph.y - 54;
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.fillText(telegraph.label, telegraph.x, labelY);
 
   context.restore();
 }
